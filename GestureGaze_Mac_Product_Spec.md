@@ -2668,6 +2668,22 @@ Permission onboarding
 Global activation hotkey
 Emergency exit hotkey
 Empty overlay window
+Single-instance launch guard
+Local app bundle packaging
+Local development signing
+GestureGaze-owned Camera and Accessibility permission entries
+No Terminal-owned permission requirement for bundled-app testing
+```
+
+### Milestone 0A: Safety Shell Hardening
+
+```text
+Product-aligned mode model
+Permission failure represented as activation status
+Debug-only development controls
+Explicit hotkey registration failure handling
+Permission and mode routing tests
+Coordinator boundary before camera and Vision services
 ```
 
 ### Milestone 1: Hand Tracking

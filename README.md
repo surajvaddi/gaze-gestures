@@ -52,6 +52,89 @@ Test result:
 - the emergency exit hotkey still returns immediately to `Idle`
 - a second launch exits instead of creating another menu bar app instance
 
+## Planned Development Phases
+
+### Phase 0: Baseline and Repo Hygiene
+
+- preserve the current Step 3B shell as the baseline
+- keep `.swiftpm/` out of source control
+- keep README focused on implemented behavior
+- keep the product spec as the forward-looking planning source
+- verify `swift build`
+
+### Phase 1: Safety Shell Hardening
+
+- keep the single-instance guard active for both `swift run` and future bundled launches
+- align the app mode model with the product spec before adding camera or gesture pipelines
+- treat permission failure as activation status, not a long-term control mode
+- make development-only controls debug-only
+- handle hotkey registration failures explicitly
+- add focused tests for permission and mode routing
+
+### Phase 2: App Bundle and Permission Identity
+
+- add a repeatable local `.app` packaging flow
+- embed the GestureGaze `Info.plist` in the bundle
+- sign the app for local development
+- launch the bundled app for permission testing instead of relying on `swift run`
+- acceptance target: Camera and Accessibility privacy entries appear for GestureGaze, not Terminal or the launching development tool
+
+### Phase 3: Coordinator Boundary
+
+- keep `GazeGesturesApplication` focused on AppKit lifecycle and window wiring
+- introduce a coordinator for mode transitions, permissions, hotkeys, future camera lifecycle, and emergency exit cleanup
+- define protocol boundaries for camera, Vision, and action dispatch services before implementing them
+
+### Phase 4: Overlay and Settings Resilience
+
+- centralize mode and permission display strings
+- make overlay sizing resilient to longer status text
+- add UI states for future hand, gaze, suspended, and emergency-exit modes
+
+### Phase 5: Camera Session Foundation
+
+- add camera lifecycle management
+- start camera only after activation and granted permissions
+- stop camera on idle, emergency exit, app termination, or failure
+- preserve the rule that the camera is off while idle
+
+### Phase 6: Vision Hand Presence
+
+- add low-FPS Vision hand presence detection in armed mode
+- transition from armed to hand mode only after stable hand presence
+- return to idle after a no-hand timeout
+
+### Phase 7: Pinch Cursor Without Actions
+
+- extract thumb and index landmarks
+- smooth and map pinch position to screen coordinates
+- render a virtual cursor
+- keep click, drag, scroll, and OS event dispatch disabled
+
+### Phase 8: Temporal Classifier and Cooldowns
+
+- add rolling observation buffers
+- implement conservative pinch-state classification
+- add cooldown and rejection reasons
+- clear classifier state on cancel and emergency exit
+
+### Phase 9: Safe Click Dispatch
+
+- add guarded Accessibility or CGEvent dispatch
+- enable only pinch-release left click
+- require confidence, correct mode, stable cursor, and inactive cooldown
+
+### Phase 10: Hand Mode Usability
+
+- add drag, scroll, freeze, cancel, calibration, and replay fixtures
+- expand settings only after the basic click path is trustworthy
+
+### Phase 11: Experimental Gaze Mode
+
+- keep gaze mode behind an explicit experimental setting
+- add palm-flip toggle, coarse gaze target, gaze orb, and hand-confirmed gaze actions
+- keep gaze disabled by default under low battery or constrained performance
+
 ## Directory Layout
 
 ```text
@@ -64,6 +147,7 @@ gaze-gestures/
         │   ├── AppState.swift
         │   ├── GazeGesturesApplication.swift
         │   ├── ModeController.swift
+        │   ├── SingleInstanceLock.swift
         │   └── main.swift
         ├── Hotkeys/
         │   └── HotkeyManager.swift
