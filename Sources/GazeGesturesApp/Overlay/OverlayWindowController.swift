@@ -3,10 +3,15 @@ import SwiftUI
 
 final class OverlayWindowController {
     private let appState: AppState
+    private let onOpenSettings: () -> Void
     private var window: NSWindow?
 
-    init(appState: AppState) {
+    init(
+        appState: AppState,
+        onOpenSettings: @escaping () -> Void
+    ) {
         self.appState = appState
+        self.onOpenSettings = onOpenSettings
     }
 
     func show() {
@@ -15,9 +20,14 @@ final class OverlayWindowController {
             return
         }
 
-        let hostingController = NSHostingController(rootView: LiquidGlassStatusBar(appState: appState))
+        let hostingController = NSHostingController(
+            rootView: LiquidGlassStatusBar(
+                appState: appState,
+                onOpenSettings: onOpenSettings
+            )
+        )
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 54),
+            contentRect: NSRect(x: 0, y: 0, width: 680, height: 54),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false

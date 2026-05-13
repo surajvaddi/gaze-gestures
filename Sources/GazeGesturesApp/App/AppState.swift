@@ -60,7 +60,40 @@ struct PermissionSnapshot {
             return "Required permissions granted"
         }
 
-        let missing = missingRequiredPermissions.map(\.rawValue).joined(separator: ", ")
+        let missing = missingRequiredPermissions
+            .map { "\($0.rawValue) \(status(for: $0).rawValue.lowercased())" }
+            .joined(separator: ", ")
+
         return "Missing: \(missing)"
+    }
+
+    var missingPermissionNames: String {
+        let names = missingRequiredPermissions.map(\.rawValue)
+
+        switch names.count {
+        case 0:
+            return "None"
+        case 1:
+            return names[0]
+        default:
+            return names.joined(separator: " + ")
+        }
+    }
+
+    var permissionCallout: String {
+        if canEnterGestureMode {
+            return "Camera and Accessibility granted"
+        }
+
+        return "Needs \(missingPermissionNames)"
+    }
+
+    func status(for kind: PermissionKind) -> PermissionStatus {
+        switch kind {
+        case .camera:
+            return camera
+        case .accessibility:
+            return accessibility
+        }
     }
 }

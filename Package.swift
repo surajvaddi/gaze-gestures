@@ -15,7 +15,19 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "GazeGesturesApp"
+            name: "GazeGesturesApp",
+            exclude: ["Resources/Info.plist"],
+            linkerSettings: [
+                .unsafeFlags(
+                    [
+                        "-Xlinker", "-sectcreate",
+                        "-Xlinker", "__TEXT",
+                        "-Xlinker", "__info_plist",
+                        "-Xlinker", "Sources/GazeGesturesApp/Resources/Info.plist"
+                    ],
+                    .when(platforms: [.macOS])
+                )
+            ]
         )
     ]
 )
