@@ -65,6 +65,27 @@ Test result:
 
 - `swift test` passes with 7 tests
 
+## Development Step 5: Phase 2 App Bundle and Permission Identity
+
+This step adds a repeatable local app-bundle flow for permission testing:
+
+- `Scripts/build-app.sh` builds the Swift executable
+- creates `dist/GestureGaze.app`
+- embeds the GestureGaze `Info.plist`
+- signs the app locally with ad-hoc signing
+- verifies the app signature
+
+Run the bundled app with:
+
+```sh
+Scripts/build-app.sh
+open dist/GestureGaze.app
+```
+
+Use the bundled app for Camera and Accessibility permission testing. This gives
+macOS a GestureGaze app identity instead of routing privacy prompts through
+Terminal or `swift run`.
+
 ## Planned Development Phases
 
 ### Phase 0: Baseline and Repo Hygiene
@@ -154,6 +175,8 @@ Test result:
 gaze-gestures/
 ├── Package.swift
 ├── README.md
+├── Scripts/
+│   └── build-app.sh
 ├── Tests/
 │   └── GazeGesturesAppTests/
 └── Sources/
