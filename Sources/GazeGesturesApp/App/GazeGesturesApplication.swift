@@ -4,6 +4,11 @@ import SwiftUI
 final class GazeGesturesApplication: NSObject, NSApplicationDelegate {
     private let appState = AppState()
     private let hotkeyManager: HotkeyManaging = HotkeyManager()
+    private let permissionProvider: PermissionProviding = PlaceholderPermissionProvider()
+    private lazy var modeController = ModeController(
+        appState: appState,
+        permissionProvider: permissionProvider
+    )
     private lazy var overlayWindowController = OverlayWindowController(appState: appState)
 
     private var menuBarController: MenuBarController?
@@ -19,6 +24,8 @@ final class GazeGesturesApplication: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        modeController.refreshPermissions()
+
         hotkeyManager.onHotkey = { [weak self] hotkey in
             self?.handleHotkey(hotkey)
         }
@@ -44,9 +51,9 @@ final class GazeGesturesApplication: NSObject, NSApplicationDelegate {
     private func handleHotkey(_ hotkey: GlobalHotkey) {
         switch hotkey {
         case .activateGestureMode:
-            appState.activateGestureMode()
+            modeController.activateGestureMode()
         case .emergencyExit:
-            appState.emergencyExit()
+            modeController.emergencyExit()
         }
     }
 

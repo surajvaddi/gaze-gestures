@@ -10,7 +10,7 @@ struct SettingsView: View {
                     .font(.title2)
                     .fontWeight(.semibold)
 
-                Text("Step 2: global hotkeys and sticky liquid glass bar")
+                Text("Step 3A: safety state machine")
                     .foregroundStyle(.secondary)
             }
 
@@ -18,6 +18,9 @@ struct SettingsView: View {
 
             LabeledContent("Current mode", value: appState.mode.rawValue)
             LabeledContent("Last event", value: appState.lastEventDescription)
+            LabeledContent("Permission gate", value: appState.permissions.summary)
+            LabeledContent("Camera", value: appState.permissions.camera.rawValue)
+            LabeledContent("Accessibility", value: appState.permissions.accessibility.rawValue)
 
             Picker("Development mode", selection: $appState.mode) {
                 ForEach(AppMode.allCases) { mode in
@@ -26,7 +29,7 @@ struct SettingsView: View {
             }
             .pickerStyle(.segmented)
 
-            Text("Use Control-Option-Command-Space to arm the interface. Use Control-Option-Command-Escape as the emergency exit. The top bar is a development overlay and ignores mouse input.")
+            Text("Use Control-Option-Command-Space to request activation. In Step 3A, permission checks are placeholders, so activation routes to Blocked. Control-Option-Command-Escape always returns to Idle.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 

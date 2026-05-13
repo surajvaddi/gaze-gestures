@@ -23,6 +23,17 @@ This step adds:
 
 The overlay receives mouse input only inside the bar so the user can drag it.
 
+## Development Step 3A: Safety State Machine
+
+This step adds structured activation routing without invoking real permission prompts yet:
+
+- modes: `Idle`, `Blocked`, `Armed`
+- placeholder permission snapshot
+- mode controller for activation and emergency-exit decisions
+- permission gate feedback in Settings and the glass bar
+
+In this step, activation intentionally routes to `Blocked` because real permission checks arrive in Step 3B.
+
 ## Directory Layout
 
 ```text
@@ -34,6 +45,7 @@ gaze-gestures/
         ├── App/
         │   ├── AppState.swift
         │   ├── GazeGesturesApplication.swift
+        │   ├── ModeController.swift
         │   └── main.swift
         ├── Hotkeys/
         │   └── HotkeyManager.swift
@@ -42,6 +54,8 @@ gaze-gestures/
         ├── Overlay/
         │   ├── LiquidGlassStatusBar.swift
         │   └── OverlayWindowController.swift
+        ├── Permissions/
+        │   └── PermissionProvider.swift
         └── Settings/
             └── SettingsView.swift
 ```

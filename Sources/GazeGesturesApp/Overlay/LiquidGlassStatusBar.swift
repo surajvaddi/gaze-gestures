@@ -18,6 +18,13 @@ struct LiquidGlassStatusBar: View {
 
             Spacer(minLength: 12)
 
+            Text(permissionText)
+                .font(.system(size: 11, weight: .semibold))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(permissionTint.opacity(0.12), in: Capsule())
+                .foregroundStyle(permissionTint)
+
             Text(appState.mode.rawValue)
                 .font(.system(size: 12, weight: .semibold))
                 .padding(.horizontal, 10)
@@ -59,8 +66,23 @@ struct LiquidGlassStatusBar: View {
         switch appState.mode {
         case .idle:
             return .gray
+        case .blocked:
+            return .orange
         case .armed:
             return .cyan
         }
+    }
+
+    private var permissionText: String {
+        switch appState.permissions.canEnterGestureMode {
+        case true:
+            return "Permissions OK"
+        case false:
+            return "Permissions Needed"
+        }
+    }
+
+    private var permissionTint: Color {
+        appState.permissions.canEnterGestureMode ? .green : .orange
     }
 }
