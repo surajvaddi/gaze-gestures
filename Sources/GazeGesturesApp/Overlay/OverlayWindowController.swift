@@ -11,7 +11,6 @@ final class OverlayWindowController {
 
     func show() {
         if let window {
-            position(window)
             window.orderFrontRegardless()
             return
         }
@@ -28,7 +27,8 @@ final class OverlayWindowController {
         window.isOpaque = false
         window.backgroundColor = .clear
         window.hasShadow = false
-        window.ignoresMouseEvents = true
+        window.ignoresMouseEvents = false
+        window.isMovableByWindowBackground = true
         window.level = .floating
         window.collectionBehavior = [
             .canJoinAllSpaces,

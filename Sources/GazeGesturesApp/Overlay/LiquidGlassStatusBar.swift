@@ -31,16 +31,21 @@ struct LiquidGlassStatusBar: View {
         }
         .padding(.horizontal, 16)
         .frame(width: 560, height: 54)
+        .contentShape(Rectangle())
         .background {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(.ultraThinMaterial)
+                .opacity(0.72)
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .strokeBorder(.white.opacity(0.22), lineWidth: 1)
+                        .fill(.white.opacity(0.035))
                 )
-                .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(.white.opacity(0.16), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.10), radius: 14, y: 6)
         }
-        .padding(10)
     }
 
     private var statusDot: some View {

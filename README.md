@@ -18,9 +18,10 @@ This step adds:
 - global activation hotkey: `Control + Option + Command + Space`
 - global emergency exit hotkey: `Control + Option + Command + Escape`
 - a top-center sticky liquid-glass status bar
+- draggable status bar positioning
 - visible mode and event feedback
 
-The overlay ignores mouse input so it does not block normal Mac interaction.
+The overlay receives mouse input only inside the bar so the user can drag it.
 
 ## Directory Layout
 
