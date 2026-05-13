@@ -10,13 +10,14 @@ struct SettingsView: View {
                     .font(.title2)
                     .fontWeight(.semibold)
 
-                Text("Step 1: native menu bar app skeleton")
+                Text("Step 2: global hotkeys and sticky liquid glass bar")
                     .foregroundStyle(.secondary)
             }
 
             Divider()
 
             LabeledContent("Current mode", value: appState.mode.rawValue)
+            LabeledContent("Last event", value: appState.lastEventDescription)
 
             Picker("Development mode", selection: $appState.mode) {
                 ForEach(AppMode.allCases) { mode in
@@ -25,7 +26,7 @@ struct SettingsView: View {
             }
             .pickerStyle(.segmented)
 
-            Text("This first slice proves the app lifecycle, menu bar controller, and settings window before camera, overlay, or gesture recognition are added.")
+            Text("Use Control-Option-Command-Space to arm the interface. Use Control-Option-Command-Escape as the emergency exit. The top bar is a development overlay and ignores mouse input.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 

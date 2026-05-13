@@ -1,10 +1,12 @@
 import AppKit
+import Combine
 
 final class MenuBarController {
     private let statusItem: NSStatusItem
     private let appState: AppState
     private let onOpenSettings: () -> Void
     private let onQuit: () -> Void
+    private var cancellables: Set<AnyCancellable> = []
 
     init(
         appState: AppState,
@@ -18,6 +20,7 @@ final class MenuBarController {
 
         configureStatusItem()
         rebuildMenu()
+        observeState()
     }
 
     private func configureStatusItem() {
@@ -55,6 +58,15 @@ final class MenuBarController {
 
         menu.items.forEach { $0.target = self }
         statusItem.menu = menu
+    }
+
+    private func observeState() {
+        appState.$mode
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.rebuildMenu()
+            }
+            .store(in: &cancellables)
     }
 
     @objc private func openSettings() {

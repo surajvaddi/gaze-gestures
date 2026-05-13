@@ -3,6 +3,9 @@ import SwiftUI
 
 final class GazeGesturesApplication: NSObject, NSApplicationDelegate {
     private let appState = AppState()
+    private let hotkeyManager: HotkeyManaging = HotkeyManager()
+    private lazy var overlayWindowController = OverlayWindowController(appState: appState)
+
     private var menuBarController: MenuBarController?
     private var settingsWindowController: NSWindowController?
 
@@ -16,6 +19,11 @@ final class GazeGesturesApplication: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        hotkeyManager.onHotkey = { [weak self] hotkey in
+            self?.handleHotkey(hotkey)
+        }
+        hotkeyManager.startListening()
+
         menuBarController = MenuBarController(
             appState: appState,
             onOpenSettings: { [weak self] in
@@ -25,6 +33,21 @@ final class GazeGesturesApplication: NSObject, NSApplicationDelegate {
                 NSApp.terminate(nil)
             }
         )
+
+        overlayWindowController.show()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        hotkeyManager.stopListening()
+    }
+
+    private func handleHotkey(_ hotkey: GlobalHotkey) {
+        switch hotkey {
+        case .activateGestureMode:
+            appState.activateGestureMode()
+        case .emergencyExit:
+            appState.emergencyExit()
+        }
     }
 
     private func openSettings() {

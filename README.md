@@ -11,6 +11,17 @@ This step creates a minimal menu bar app with:
 - a Settings window
 - shared app state for future modes
 
+## Development Step 2: Hotkeys and Sticky Status Bar
+
+This step adds:
+
+- global activation hotkey: `Control + Option + Command + Space`
+- global emergency exit hotkey: `Control + Option + Command + Escape`
+- a top-center sticky liquid-glass status bar
+- visible mode and event feedback
+
+The overlay ignores mouse input so it does not block normal Mac interaction.
+
 ## Directory Layout
 
 ```text
@@ -23,8 +34,13 @@ gaze-gestures/
         │   ├── AppState.swift
         │   ├── GazeGesturesApplication.swift
         │   └── main.swift
+        ├── Hotkeys/
+        │   └── HotkeyManager.swift
         ├── MenuBar/
         │   └── MenuBarController.swift
+        ├── Overlay/
+        │   ├── LiquidGlassStatusBar.swift
+        │   └── OverlayWindowController.swift
         └── Settings/
             └── SettingsView.swift
 ```
