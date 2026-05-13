@@ -51,12 +51,9 @@ struct SettingsView: View {
                 )
             }
 
-            Picker("Development mode", selection: $appState.mode) {
-                ForEach(AppMode.allCases) { mode in
-                    Text(mode.rawValue).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
+            #if DEBUG
+            developmentModePicker
+            #endif
 
             HStack {
                 Button("Refresh Permissions") {
@@ -108,6 +105,15 @@ struct SettingsView: View {
                 openAction()
             }
         }
+    }
+
+    private var developmentModePicker: some View {
+        Picker("Development mode", selection: $appState.mode) {
+            ForEach(AppMode.allCases) { mode in
+                Text(mode.rawValue).tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
     }
 
     private func statusColor(for status: PermissionStatus) -> Color {

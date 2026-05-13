@@ -52,6 +52,19 @@ Test result:
 - the emergency exit hotkey still returns immediately to `Idle`
 - a second launch exits instead of creating another menu bar app instance
 
+## Development Step 4: Phase 1A Safety Shell Hardening
+
+This step tightens the existing shell before camera or gesture pipelines are added:
+
+- permission bootstrap state renamed from placeholder to unknown
+- development mode picker is compiled only in debug builds
+- global hotkey registration now reports install or registration failures
+- first Swift test target covers permission summaries, activation routing, emergency exit routing, and hotkey failure messages
+
+Test result:
+
+- `swift test` passes with 7 tests
+
 ## Planned Development Phases
 
 ### Phase 0: Baseline and Repo Hygiene
@@ -141,6 +154,8 @@ Test result:
 gaze-gestures/
 ├── Package.swift
 ├── README.md
+├── Tests/
+│   └── GazeGesturesAppTests/
 └── Sources/
     └── GazeGesturesApp/
         ├── App/

@@ -28,6 +28,10 @@ let package = Package(
                     .when(platforms: [.macOS])
                 )
             ]
+        ),
+        .testTarget(
+            name: "GazeGesturesAppTests",
+            dependencies: ["GazeGesturesApp"]
         )
     ]
 )

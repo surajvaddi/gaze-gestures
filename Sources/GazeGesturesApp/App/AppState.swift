@@ -3,7 +3,7 @@ import Foundation
 final class AppState: ObservableObject {
     @Published var mode: AppMode = .idle
     @Published var lastEventDescription: String = "Ready"
-    @Published var permissions = PermissionSnapshot.placeholder
+    @Published var permissions = PermissionSnapshot.unknown
 }
 
 enum AppMode: String, CaseIterable, Identifiable {
@@ -32,7 +32,7 @@ struct PermissionSnapshot {
     var camera: PermissionStatus
     var accessibility: PermissionStatus
 
-    static let placeholder = PermissionSnapshot(
+    static let unknown = PermissionSnapshot(
         camera: .unknown,
         accessibility: .unknown
     )

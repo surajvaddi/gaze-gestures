@@ -9,8 +9,26 @@ enum GlobalHotkey {
 protocol HotkeyManaging: AnyObject {
     var onHotkey: ((GlobalHotkey) -> Void)? { get set }
 
-    func startListening()
+    @discardableResult
+    func startListening() -> Result<Void, HotkeyRegistrationFailure>
     func stopListening()
+}
+
+enum HotkeyRegistrationFailure: Error, Equatable {
+    case eventHandlerInstallFailed(OSStatus)
+    case activationHotkeyFailed(OSStatus)
+    case emergencyExitHotkeyFailed(OSStatus)
+
+    var userMessage: String {
+        switch self {
+        case .eventHandlerInstallFailed(let status):
+            return "Hotkeys unavailable: event handler failed (\(status))"
+        case .activationHotkeyFailed(let status):
+            return "Activation hotkey unavailable (\(status))"
+        case .emergencyExitHotkeyFailed(let status):
+            return "Emergency exit hotkey unavailable (\(status))"
+        }
+    }
 }
 
 final class HotkeyManager: HotkeyManaging {
@@ -24,8 +42,9 @@ final class HotkeyManager: HotkeyManaging {
         stopListening()
     }
 
-    func startListening() {
-        guard eventHandler == nil else { return }
+    @discardableResult
+    func startListening() -> Result<Void, HotkeyRegistrationFailure> {
+        guard eventHandler == nil else { return .success(()) }
 
         var eventType = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
@@ -33,7 +52,7 @@ final class HotkeyManager: HotkeyManaging {
         )
 
         let selfPointer = Unmanaged.passUnretained(self).toOpaque()
-        InstallEventHandler(
+        let installStatus = InstallEventHandler(
             GetApplicationEventTarget(),
             hotkeyEventHandler,
             1,
@@ -42,7 +61,17 @@ final class HotkeyManager: HotkeyManaging {
             &eventHandler
         )
 
-        registerHotkeys()
+        guard installStatus == noErr else {
+            eventHandler = nil
+            return .failure(.eventHandlerInstallFailed(installStatus))
+        }
+
+        let registrationResult = registerHotkeys()
+        if case .failure = registrationResult {
+            stopListening()
+        }
+
+        return registrationResult
     }
 
     func stopListening() {
@@ -62,11 +91,11 @@ final class HotkeyManager: HotkeyManaging {
         }
     }
 
-    private func registerHotkeys() {
+    private func registerHotkeys() -> Result<Void, HotkeyRegistrationFailure> {
         let signature = HotkeyManager.fourCharCode("GGHK")
 
         let activationID = EventHotKeyID(signature: signature, id: 1)
-        RegisterEventHotKey(
+        let activationStatus = RegisterEventHotKey(
             UInt32(kVK_Space),
             UInt32(controlKey | optionKey | cmdKey),
             activationID,
@@ -75,8 +104,12 @@ final class HotkeyManager: HotkeyManaging {
             &activationHotkey
         )
 
+        guard activationStatus == noErr else {
+            return .failure(.activationHotkeyFailed(activationStatus))
+        }
+
         let emergencyExitID = EventHotKeyID(signature: signature, id: 2)
-        RegisterEventHotKey(
+        let emergencyExitStatus = RegisterEventHotKey(
             UInt32(kVK_Escape),
             UInt32(controlKey | optionKey | cmdKey),
             emergencyExitID,
@@ -84,6 +117,12 @@ final class HotkeyManager: HotkeyManaging {
             0,
             &emergencyExitHotkey
         )
+
+        guard emergencyExitStatus == noErr else {
+            return .failure(.emergencyExitHotkeyFailed(emergencyExitStatus))
+        }
+
+        return .success(())
     }
 
     fileprivate func handleHotkey(id: UInt32) {

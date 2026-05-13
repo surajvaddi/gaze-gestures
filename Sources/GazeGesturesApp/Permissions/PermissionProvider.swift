@@ -20,7 +20,7 @@ final class SystemPermissionProvider: PermissionProviding {
 
     func requestCameraAccess(completion: @escaping (PermissionSnapshot) -> Void) {
         AVCaptureDevice.requestAccess(for: .video) { [weak self] _ in
-            let snapshot = self?.currentSnapshot() ?? .placeholder
+            let snapshot = self?.currentSnapshot() ?? .unknown
 
             DispatchQueue.main.async {
                 completion(snapshot)

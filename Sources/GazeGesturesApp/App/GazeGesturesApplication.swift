@@ -47,7 +47,12 @@ final class GazeGesturesApplication: NSObject, NSApplicationDelegate {
         hotkeyManager.onHotkey = { [weak self] hotkey in
             self?.handleHotkey(hotkey)
         }
-        hotkeyManager.startListening()
+        switch hotkeyManager.startListening() {
+        case .success:
+            break
+        case .failure(let failure):
+            appState.lastEventDescription = failure.userMessage
+        }
 
         menuBarController = MenuBarController(
             appState: appState,
