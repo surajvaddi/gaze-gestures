@@ -32,6 +32,10 @@ struct SettingsView: View {
                     "Permission gate",
                     value: AppPresentation.permission(for: appState.permissions).label
                 )
+                LabeledContent(
+                    "Camera session",
+                    value: AppPresentation.camera(for: appState.cameraSessionState).label
+                )
             }
 
             VStack(alignment: .leading, spacing: 12) {

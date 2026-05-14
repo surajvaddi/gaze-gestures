@@ -4,6 +4,7 @@ final class AppState: ObservableObject {
     @Published var mode: AppMode = .idle
     @Published var lastEventDescription: String = "Ready"
     @Published var permissions = PermissionSnapshot.unknown
+    @Published var cameraSessionState: CameraSessionState = .idle
 }
 
 enum AppMode: String, CaseIterable, Identifiable {
@@ -30,6 +31,14 @@ enum PermissionStatus: String {
     case granted = "Granted"
     case denied = "Denied"
     case restricted = "Restricted"
+}
+
+enum CameraSessionState: Equatable {
+    case idle
+    case starting
+    case running
+    case stopping
+    case failed(String)
 }
 
 struct PermissionSnapshot {

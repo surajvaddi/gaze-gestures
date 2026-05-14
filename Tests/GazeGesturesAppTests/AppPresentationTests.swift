@@ -51,4 +51,17 @@ final class AppPresentationTests: XCTestCase {
         XCTAssertEqual(AppPresentation.tint(for: .denied), .red)
         XCTAssertEqual(AppPresentation.tint(for: .restricted), .red)
     }
+
+    func testCameraPresentationCoversCameraLifecycle() {
+        XCTAssertEqual(AppPresentation.camera(for: .idle).label, "Camera Off")
+        XCTAssertEqual(AppPresentation.camera(for: .starting).tint, .cyan)
+        XCTAssertEqual(AppPresentation.camera(for: .running).label, "Camera On")
+        XCTAssertEqual(AppPresentation.camera(for: .stopping).tint, .orange)
+
+        let failed = AppPresentation.camera(for: .failed("No camera"))
+
+        XCTAssertEqual(failed.label, "Camera Failed")
+        XCTAssertEqual(failed.helpText, "No camera")
+        XCTAssertEqual(failed.tint, .red)
+    }
 }

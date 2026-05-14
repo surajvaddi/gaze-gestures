@@ -22,6 +22,12 @@ struct PermissionPresentation: Equatable {
     var tint: PresentationTint
 }
 
+struct CameraPresentation: Equatable {
+    var label: String
+    var helpText: String
+    var tint: PresentationTint
+}
+
 enum AppPresentation {
     static func mode(
         for mode: AppMode,
@@ -97,6 +103,41 @@ enum AppPresentation {
             return .red
         case .unknown:
             return .orange
+        }
+    }
+
+    static func camera(for state: CameraSessionState) -> CameraPresentation {
+        switch state {
+        case .idle:
+            return CameraPresentation(
+                label: "Camera Off",
+                helpText: "Camera processing is off while GestureGaze is idle.",
+                tint: .gray
+            )
+        case .starting:
+            return CameraPresentation(
+                label: "Camera Starting",
+                helpText: "Camera session is starting after activation.",
+                tint: .cyan
+            )
+        case .running:
+            return CameraPresentation(
+                label: "Camera On",
+                helpText: "Camera session is running for gesture readiness.",
+                tint: .green
+            )
+        case .stopping:
+            return CameraPresentation(
+                label: "Camera Stopping",
+                helpText: "Camera session is stopping.",
+                tint: .orange
+            )
+        case .failed(let message):
+            return CameraPresentation(
+                label: "Camera Failed",
+                helpText: message,
+                tint: .red
+            )
         }
     }
 }

@@ -5,7 +5,8 @@ final class GazeGesturesApplication: NSObject, NSApplicationDelegate {
     private let singleInstanceLock: SingleInstanceLock
     private let coordinator = AppCoordinator(
         permissionProvider: SystemPermissionProvider(),
-        hotkeyManager: HotkeyManager()
+        hotkeyManager: HotkeyManager(),
+        cameraSessionManager: CameraSessionManager()
     )
     private lazy var overlayWindowController = OverlayWindowController(
         appState: coordinator.appState,

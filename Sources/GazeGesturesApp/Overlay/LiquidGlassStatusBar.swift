@@ -10,6 +10,7 @@ struct LiquidGlassStatusBar: View {
             permissions: appState.permissions
         )
         let permission = AppPresentation.permission(for: appState.permissions)
+        let camera = AppPresentation.camera(for: appState.cameraSessionState)
 
         HStack(spacing: 12) {
             statusDot(mode: mode)
@@ -60,12 +61,23 @@ struct LiquidGlassStatusBar: View {
             .help(mode.helpText)
             .frame(maxWidth: 170)
 
+            Text(camera.label)
+                .font(.system(size: 11, weight: .semibold))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(camera.tint.color.opacity(0.13), in: Capsule())
+                .foregroundStyle(camera.tint.color)
+                .help(camera.helpText)
+                .frame(maxWidth: 130)
+
             Text("⌃⌥⌘Space")
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 16)
-        .frame(width: 680, height: 54)
+        .frame(width: 800, height: 54)
         .contentShape(Rectangle())
         .background {
             RoundedRectangle(cornerRadius: 18, style: .continuous)

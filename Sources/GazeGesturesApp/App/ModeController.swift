@@ -16,27 +16,35 @@ final class ModeController {
         appState.permissions = permissionProvider.currentSnapshot()
     }
 
-    func activateGestureMode() {
+    @discardableResult
+    func activateGestureMode() -> ActivationResult {
         let permissions = permissionProvider.currentSnapshot()
         appState.permissions = permissions
 
         guard permissions.canEnterGestureMode else {
             appState.mode = .blocked
             appState.lastEventDescription = permissions.summary
-            return
+            return .blocked
         }
 
         guard appState.mode != .armed else {
             appState.lastEventDescription = "Already armed"
-            return
+            return .alreadyArmed
         }
 
         appState.mode = .armed
         appState.lastEventDescription = "Activation hotkey accepted"
+        return .armed
     }
 
     func emergencyExit() {
         appState.mode = .idle
         appState.lastEventDescription = "Emergency exit"
     }
+}
+
+enum ActivationResult: Equatable {
+    case blocked
+    case armed
+    case alreadyArmed
 }

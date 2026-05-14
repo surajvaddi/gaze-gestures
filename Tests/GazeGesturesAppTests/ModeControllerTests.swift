@@ -7,8 +7,9 @@ final class ModeControllerTests: XCTestCase {
         let provider = StubPermissionProvider(snapshot: .unknown)
         let controller = ModeController(appState: appState, permissionProvider: provider)
 
-        controller.activateGestureMode()
+        let result = controller.activateGestureMode()
 
+        XCTAssertEqual(result, .blocked)
         XCTAssertEqual(appState.mode, .blocked)
         XCTAssertEqual(appState.permissions.camera, .unknown)
         XCTAssertEqual(appState.permissions.accessibility, .unknown)
@@ -22,8 +23,9 @@ final class ModeControllerTests: XCTestCase {
         )
         let controller = ModeController(appState: appState, permissionProvider: provider)
 
-        controller.activateGestureMode()
+        let result = controller.activateGestureMode()
 
+        XCTAssertEqual(result, .armed)
         XCTAssertEqual(appState.mode, .armed)
         XCTAssertEqual(appState.lastEventDescription, "Activation hotkey accepted")
     }
@@ -36,6 +38,7 @@ final class ModeControllerTests: XCTestCase {
         let controller = ModeController(appState: appState, permissionProvider: provider)
 
         controller.activateGestureMode()
+        XCTAssertEqual(controller.activateGestureMode(), .alreadyArmed)
         controller.emergencyExit()
 
         XCTAssertEqual(appState.mode, .idle)

@@ -105,6 +105,19 @@ This step prepares the UI shell for upcoming active modes:
 - settings permission coloring now uses the shared presentation mapping
 - presentation tests cover current and future mode display behavior
 
+## Development Step 8: Phase 5 Camera Session Foundation
+
+This step adds camera lifecycle plumbing without Vision or gesture detection:
+
+- added `CameraSessionManaging` and a real AVFoundation-backed `CameraSessionManager`
+- app state now tracks camera session state separately from control mode
+- coordinator starts the camera only after permission-gated activation succeeds
+- blocked activation does not start the camera
+- emergency exit and coordinator shutdown stop the camera
+- camera failures return the app to idle and surface the failure message
+- overlay and Settings show camera session state
+- tests cover camera start, stop, blocked activation, state updates, and failure handling
+
 ## Planned Development Phases
 
 ### Phase 0: Baseline and Repo Hygiene
@@ -208,6 +221,8 @@ gaze-gestures/
         │   ├── ModeController.swift
         │   ├── SingleInstanceLock.swift
         │   └── main.swift
+        ├── Camera/
+        │   └── CameraSessionManager.swift
         ├── Hotkeys/
         │   └── HotkeyManager.swift
         ├── MenuBar/

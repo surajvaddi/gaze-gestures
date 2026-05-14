@@ -27,7 +27,7 @@ final class OverlayWindowController {
             )
         )
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 680, height: 54),
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 54),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false

@@ -5,16 +5,19 @@ final class AppCoordinator {
 
     private let permissionProvider: PermissionProviding
     private let hotkeyManager: HotkeyManaging
+    private let cameraSessionManager: CameraSessionManaging
     private let modeController: ModeController
 
     init(
         appState: AppState = AppState(),
         permissionProvider: PermissionProviding,
-        hotkeyManager: HotkeyManaging
+        hotkeyManager: HotkeyManaging,
+        cameraSessionManager: CameraSessionManaging
     ) {
         self.appState = appState
         self.permissionProvider = permissionProvider
         self.hotkeyManager = hotkeyManager
+        self.cameraSessionManager = cameraSessionManager
         self.modeController = ModeController(
             appState: appState,
             permissionProvider: permissionProvider
@@ -23,6 +26,10 @@ final class AppCoordinator {
 
     func start() {
         modeController.refreshPermissions()
+
+        cameraSessionManager.onStateChange = { [weak self] state in
+            self?.handleCameraStateChange(state)
+        }
 
         hotkeyManager.onHotkey = { [weak self] hotkey in
             self?.handleHotkey(hotkey)
@@ -37,6 +44,7 @@ final class AppCoordinator {
     }
 
     func stop() {
+        cameraSessionManager.stopSession()
         hotkeyManager.stopListening()
     }
 
@@ -66,9 +74,22 @@ final class AppCoordinator {
     private func handleHotkey(_ hotkey: GlobalHotkey) {
         switch hotkey {
         case .activateGestureMode:
-            modeController.activateGestureMode()
+            let result = modeController.activateGestureMode()
+            if result == .armed || result == .alreadyArmed {
+                cameraSessionManager.startSession()
+            }
         case .emergencyExit:
+            cameraSessionManager.stopSession()
             modeController.emergencyExit()
+        }
+    }
+
+    private func handleCameraStateChange(_ state: CameraSessionState) {
+        appState.cameraSessionState = state
+
+        if case .failed(let message) = state {
+            modeController.emergencyExit()
+            appState.lastEventDescription = "Camera failed: \(message)"
         }
     }
 }
