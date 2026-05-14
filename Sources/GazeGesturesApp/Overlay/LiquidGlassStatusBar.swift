@@ -5,8 +5,14 @@ struct LiquidGlassStatusBar: View {
     let onOpenSettings: () -> Void
 
     var body: some View {
+        let mode = AppPresentation.mode(
+            for: appState.mode,
+            permissions: appState.permissions
+        )
+        let permission = AppPresentation.permission(for: appState.permissions)
+
         HStack(spacing: 12) {
-            statusDot
+            statusDot(mode: mode)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Gaze Gestures")
@@ -15,35 +21,44 @@ struct LiquidGlassStatusBar: View {
                 Text(appState.lastEventDescription)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
+            .layoutPriority(1)
 
             Spacer(minLength: 12)
 
             Button {
                 onOpenSettings()
             } label: {
-                Text(permissionText)
+                Text(permission.label)
                     .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                     .padding(.horizontal, 9)
                     .padding(.vertical, 5)
-                    .background(permissionTint.opacity(0.12), in: Capsule())
-                    .foregroundStyle(permissionTint)
+                    .background(permission.tint.color.opacity(0.12), in: Capsule())
+                    .foregroundStyle(permission.tint.color)
             }
             .buttonStyle(.plain)
-            .help(permissionHelpText)
+            .help(permission.helpText)
+            .frame(maxWidth: 190)
 
             Button {
                 onOpenSettings()
             } label: {
-                Text(modeText)
+                Text(mode.label)
                     .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(modeTint.opacity(0.16), in: Capsule())
-                    .foregroundStyle(modeTint)
+                    .background(mode.tint.color.opacity(0.16), in: Capsule())
+                    .foregroundStyle(mode.tint.color)
             }
             .buttonStyle(.plain)
-            .help(modeHelpText)
+            .help(mode.helpText)
+            .frame(maxWidth: 170)
 
             Text("⌃⌥⌘Space")
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
@@ -68,63 +83,31 @@ struct LiquidGlassStatusBar: View {
         }
     }
 
-    private var statusDot: some View {
+    private func statusDot(mode: ModePresentation) -> some View {
         Circle()
-            .fill(modeTint)
+            .fill(mode.tint.color)
             .frame(width: 10, height: 10)
-            .shadow(color: modeTint.opacity(0.55), radius: 8)
+            .shadow(color: mode.tint.color.opacity(0.55), radius: 8)
     }
+}
 
-    private var modeTint: Color {
-        switch appState.mode {
-        case .idle:
+extension PresentationTint {
+    var color: Color {
+        switch self {
+        case .gray:
             return .gray
-        case .blocked:
+        case .orange:
             return .orange
-        case .armed:
+        case .cyan:
             return .cyan
-        }
-    }
-
-    private var permissionText: String {
-        if appState.permissions.canEnterGestureMode {
-            return "Permissions OK"
-        }
-
-        return appState.permissions.permissionCallout
-    }
-
-    private var permissionTint: Color {
-        appState.permissions.canEnterGestureMode ? .green : .orange
-    }
-
-    private var permissionHelpText: String {
-        if appState.permissions.canEnterGestureMode {
-            return "Required permissions are granted. Click to open Gaze Gestures settings."
-        }
-
-        return "\(appState.permissions.summary). Click to open settings and permission links."
-    }
-
-    private var modeText: String {
-        switch appState.mode {
-        case .idle:
-            return "Idle: Off"
-        case .blocked:
-            return "Blocked: Open Settings"
-        case .armed:
-            return "Armed: Ready"
-        }
-    }
-
-    private var modeHelpText: String {
-        switch appState.mode {
-        case .idle:
-            return "Gesture control is off. Press Control-Option-Command-Space to request activation."
-        case .blocked:
-            return "\(appState.permissions.summary). Click to open settings."
-        case .armed:
-            return "Gesture mode is armed. Press Control-Option-Command-Escape for emergency exit."
+        case .green:
+            return .green
+        case .red:
+            return .red
+        case .purple:
+            return .purple
+        case .blue:
+            return .blue
         }
     }
 }

@@ -95,6 +95,16 @@ This step keeps app lifecycle wiring separate from control logic:
 - settings actions now route through the coordinator
 - future camera, Vision, and action dispatch services can attach to the coordinator without bloating the application delegate
 
+## Development Step 7: Phase 4 Overlay and Settings Resilience
+
+This step prepares the UI shell for upcoming active modes:
+
+- added future mode cases for hand gesture, gaze gesture, suspended, and emergency-exiting states
+- centralized mode labels, permission labels, help text, and semantic tints in `AppPresentation`
+- overlay status text and compact badges now truncate instead of expanding unpredictably
+- settings permission coloring now uses the shared presentation mapping
+- presentation tests cover current and future mode display behavior
+
 ## Planned Development Phases
 
 ### Phase 0: Baseline and Repo Hygiene
@@ -192,6 +202,7 @@ gaze-gestures/
     └── GazeGesturesApp/
         ├── App/
         │   ├── AppCoordinator.swift
+        │   ├── AppPresentation.swift
         │   ├── AppState.swift
         │   ├── GazeGesturesApplication.swift
         │   ├── ModeController.swift

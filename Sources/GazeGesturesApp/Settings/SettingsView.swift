@@ -28,7 +28,10 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 10) {
                 LabeledContent("Current mode", value: appState.mode.rawValue)
                 LabeledContent("Last event", value: appState.lastEventDescription)
-                LabeledContent("Permission gate", value: appState.permissions.summary)
+                LabeledContent(
+                    "Permission gate",
+                    value: AppPresentation.permission(for: appState.permissions).label
+                )
             }
 
             VStack(alignment: .leading, spacing: 12) {
@@ -117,13 +120,6 @@ struct SettingsView: View {
     }
 
     private func statusColor(for status: PermissionStatus) -> Color {
-        switch status {
-        case .granted:
-            return .green
-        case .denied, .restricted:
-            return .red
-        case .unknown:
-            return .orange
-        }
+        AppPresentation.tint(for: status).color
     }
 }

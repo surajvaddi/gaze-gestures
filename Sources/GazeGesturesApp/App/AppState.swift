@@ -10,6 +10,10 @@ enum AppMode: String, CaseIterable, Identifiable {
     case idle = "Idle"
     case blocked = "Blocked"
     case armed = "Armed"
+    case handGesture = "Hand Gesture"
+    case gazeGesture = "Gaze Gesture"
+    case suspended = "Suspended"
+    case emergencyExiting = "Emergency Exiting"
 
     var id: String { rawValue }
 }
