@@ -3,15 +3,12 @@ import SwiftUI
 
 final class GazeGesturesApplication: NSObject, NSApplicationDelegate {
     private let singleInstanceLock: SingleInstanceLock
-    private let appState = AppState()
-    private let hotkeyManager: HotkeyManaging = HotkeyManager()
-    private let permissionProvider: PermissionProviding = SystemPermissionProvider()
-    private lazy var modeController = ModeController(
-        appState: appState,
-        permissionProvider: permissionProvider
+    private let coordinator = AppCoordinator(
+        permissionProvider: SystemPermissionProvider(),
+        hotkeyManager: HotkeyManager()
     )
     private lazy var overlayWindowController = OverlayWindowController(
-        appState: appState,
+        appState: coordinator.appState,
         onOpenSettings: { [weak self] in
             self?.openSettings()
         }
@@ -42,20 +39,10 @@ final class GazeGesturesApplication: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        modeController.refreshPermissions()
-
-        hotkeyManager.onHotkey = { [weak self] hotkey in
-            self?.handleHotkey(hotkey)
-        }
-        switch hotkeyManager.startListening() {
-        case .success:
-            break
-        case .failure(let failure):
-            appState.lastEventDescription = failure.userMessage
-        }
+        coordinator.start()
 
         menuBarController = MenuBarController(
-            appState: appState,
+            appState: coordinator.appState,
             onOpenSettings: { [weak self] in
                 self?.openSettings()
             },
@@ -68,17 +55,8 @@ final class GazeGesturesApplication: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        hotkeyManager.stopListening()
+        coordinator.stop()
         singleInstanceLock.release()
-    }
-
-    private func handleHotkey(_ hotkey: GlobalHotkey) {
-        switch hotkey {
-        case .activateGestureMode:
-            modeController.activateGestureMode()
-        case .emergencyExit:
-            modeController.emergencyExit()
-        }
     }
 
     private func openSettings() {
@@ -90,22 +68,22 @@ final class GazeGesturesApplication: NSObject, NSApplicationDelegate {
 
         let hostingController = NSHostingController(
             rootView: SettingsView(
-                appState: appState,
+                appState: coordinator.appState,
                 permissionActions: PermissionActions(
-                    refresh: { [weak self] in
-                        self?.refreshPermissions()
+                    refresh: { [coordinator] in
+                        coordinator.refreshPermissions()
                     },
-                    requestCamera: { [weak self] in
-                        self?.requestCameraAccess()
+                    requestCamera: { [coordinator] in
+                        coordinator.requestCameraAccess()
                     },
-                    requestAccessibility: { [weak self] in
-                        self?.requestAccessibilityTrust()
+                    requestAccessibility: { [coordinator] in
+                        coordinator.requestAccessibilityTrust()
                     },
-                    openCameraSettings: { [weak self] in
-                        self?.permissionProvider.openSystemSettings(for: .camera)
+                    openCameraSettings: { [coordinator] in
+                        coordinator.openSystemSettings(for: .camera)
                     },
-                    openAccessibilitySettings: { [weak self] in
-                        self?.permissionProvider.openSystemSettings(for: .accessibility)
+                    openAccessibilitySettings: { [coordinator] in
+                        coordinator.openSystemSettings(for: .accessibility)
                     }
                 )
             )
@@ -122,24 +100,5 @@ final class GazeGesturesApplication: NSObject, NSApplicationDelegate {
         settingsWindowController = controller
         controller.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
-    }
-
-    private func refreshPermissions() {
-        modeController.refreshPermissions()
-        appState.lastEventDescription = appState.permissions.summary
-    }
-
-    private func requestCameraAccess() {
-        appState.lastEventDescription = "Requesting Camera permission"
-
-        permissionProvider.requestCameraAccess { [weak self] snapshot in
-            self?.appState.permissions = snapshot
-            self?.appState.lastEventDescription = snapshot.summary
-        }
-    }
-
-    private func requestAccessibilityTrust() {
-        appState.permissions = permissionProvider.requestAccessibilityTrust()
-        appState.lastEventDescription = appState.permissions.summary
     }
 }

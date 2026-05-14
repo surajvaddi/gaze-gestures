@@ -86,6 +86,15 @@ Use the bundled app for Camera and Accessibility permission testing. This gives
 macOS a GestureGaze app identity instead of routing privacy prompts through
 Terminal or `swift run`.
 
+## Development Step 6: Phase 3 Coordinator Boundary
+
+This step keeps app lifecycle wiring separate from control logic:
+
+- `GazeGesturesApplication` owns AppKit windows, menu bar wiring, and app lifecycle
+- `AppCoordinator` owns permission refresh, permission requests, hotkey routing, and mode transitions
+- settings actions now route through the coordinator
+- future camera, Vision, and action dispatch services can attach to the coordinator without bloating the application delegate
+
 ## Planned Development Phases
 
 ### Phase 0: Baseline and Repo Hygiene
@@ -182,6 +191,7 @@ gaze-gestures/
 └── Sources/
     └── GazeGesturesApp/
         ├── App/
+        │   ├── AppCoordinator.swift
         │   ├── AppState.swift
         │   ├── GazeGesturesApplication.swift
         │   ├── ModeController.swift
