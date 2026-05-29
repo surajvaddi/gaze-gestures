@@ -254,6 +254,7 @@ private final class CoordinatorPermissionProvider: PermissionProviding {
 
 private final class CoordinatorCameraSessionManager: CameraSessionManaging {
     var onStateChange: ((CameraSessionState) -> Void)?
+    var onFrame: ((CameraFrame) -> Void)?
     var startCallCount = 0
     var stopCallCount = 0
 

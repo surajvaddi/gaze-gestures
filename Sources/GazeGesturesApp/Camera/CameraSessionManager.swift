@@ -1,15 +1,23 @@
 import AVFoundation
+import CoreMedia
 import Foundation
+
+struct CameraFrame {
+    var sampleBuffer: CMSampleBuffer?
+    var timestamp: TimeInterval
+}
 
 protocol CameraSessionManaging: AnyObject {
     var onStateChange: ((CameraSessionState) -> Void)? { get set }
+    var onFrame: ((CameraFrame) -> Void)? { get set }
 
     func startSession()
     func stopSession()
 }
 
-final class CameraSessionManager: CameraSessionManaging {
+final class CameraSessionManager: NSObject, CameraSessionManaging {
     var onStateChange: ((CameraSessionState) -> Void)?
+    var onFrame: ((CameraFrame) -> Void)?
 
     private let session = AVCaptureSession()
     private let queue = DispatchQueue(label: "local.gazegestures.camera-session")
@@ -67,6 +75,16 @@ final class CameraSessionManager: CameraSessionManaging {
         }
 
         session.addInput(input)
+
+        let output = AVCaptureVideoDataOutput()
+        output.alwaysDiscardsLateVideoFrames = true
+        output.setSampleBufferDelegate(self, queue: queue)
+
+        guard session.canAddOutput(output) else {
+            throw CameraSessionError.cannotAddVideoOutput
+        }
+
+        session.addOutput(output)
         isConfigured = true
     }
 
@@ -77,9 +95,28 @@ final class CameraSessionManager: CameraSessionManaging {
     }
 }
 
+extension CameraSessionManager: AVCaptureVideoDataOutputSampleBufferDelegate {
+    func captureOutput(
+        _ output: AVCaptureOutput,
+        didOutput sampleBuffer: CMSampleBuffer,
+        from connection: AVCaptureConnection
+    ) {
+        guard session.isRunning else { return }
+
+        let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        onFrame?(
+            CameraFrame(
+                sampleBuffer: sampleBuffer,
+                timestamp: CMTimeGetSeconds(presentationTime)
+            )
+        )
+    }
+}
+
 private enum CameraSessionError: LocalizedError {
     case noVideoDevice
     case cannotAddVideoInput
+    case cannotAddVideoOutput
 
     var errorDescription: String? {
         switch self {
@@ -87,6 +124,8 @@ private enum CameraSessionError: LocalizedError {
             return "No video camera is available"
         case .cannotAddVideoInput:
             return "Camera input could not be added"
+        case .cannotAddVideoOutput:
+            return "Camera frame output could not be added"
         }
     }
 }
