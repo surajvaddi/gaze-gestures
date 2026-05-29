@@ -143,6 +143,52 @@ final class AppCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.appState.lastEventDescription, "Missing: Accessibility restricted")
     }
 
+    func testPermissionRefreshStopsCameraAndBlocksWhenActivePermissionsAreLost() {
+        let permissionProvider = CoordinatorPermissionProvider(
+            snapshot: PermissionSnapshot(camera: .granted, accessibility: .granted)
+        )
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let coordinator = AppCoordinator(
+            permissionProvider: permissionProvider,
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+
+        permissionProvider.snapshot = PermissionSnapshot(camera: .denied, accessibility: .granted)
+        coordinator.refreshPermissions()
+
+        XCTAssertEqual(coordinator.appState.mode, .blocked)
+        XCTAssertEqual(coordinator.appState.lastEventDescription, "Missing: Camera denied")
+        XCTAssertEqual(cameraSessionManager.stopCallCount, 1)
+    }
+
+    func testCameraPermissionRequestStopsCameraWhenActivePermissionIsDenied() {
+        let permissionProvider = CoordinatorPermissionProvider(
+            snapshot: PermissionSnapshot(camera: .granted, accessibility: .granted)
+        )
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let coordinator = AppCoordinator(
+            permissionProvider: permissionProvider,
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+
+        permissionProvider.snapshot = PermissionSnapshot(camera: .denied, accessibility: .granted)
+        coordinator.requestCameraAccess()
+
+        XCTAssertEqual(coordinator.appState.mode, .blocked)
+        XCTAssertEqual(coordinator.appState.lastEventDescription, "Missing: Camera denied")
+        XCTAssertEqual(cameraSessionManager.stopCallCount, 1)
+    }
+
     func testStopStopsHotkeysAndCamera() {
         let hotkeyManager = CoordinatorHotkeyManager()
         let cameraSessionManager = CoordinatorCameraSessionManager()

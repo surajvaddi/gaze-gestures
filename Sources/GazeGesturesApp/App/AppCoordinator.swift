@@ -50,6 +50,7 @@ final class AppCoordinator {
 
     func refreshPermissions() {
         modeController.refreshPermissions()
+        handleRequiredPermissionLoss()
         appState.lastEventDescription = appState.permissions.summary
     }
 
@@ -57,13 +58,17 @@ final class AppCoordinator {
         appState.lastEventDescription = "Requesting Camera permission"
 
         permissionProvider.requestCameraAccess { [weak self] snapshot in
-            self?.appState.permissions = snapshot
-            self?.appState.lastEventDescription = snapshot.summary
+            guard let self else { return }
+
+            self.appState.permissions = snapshot
+            self.handleRequiredPermissionLoss()
+            self.appState.lastEventDescription = snapshot.summary
         }
     }
 
     func requestAccessibilityTrust() {
         appState.permissions = permissionProvider.requestAccessibilityTrust()
+        handleRequiredPermissionLoss()
         appState.lastEventDescription = appState.permissions.summary
     }
 
@@ -91,5 +96,15 @@ final class AppCoordinator {
             modeController.emergencyExit()
             appState.lastEventDescription = "Camera failed: \(message)"
         }
+    }
+
+    private func handleRequiredPermissionLoss() {
+        guard appState.mode.requiresActivePermissions,
+              !appState.permissions.canEnterGestureMode else {
+            return
+        }
+
+        cameraSessionManager.stopSession()
+        appState.mode = .blocked
     }
 }

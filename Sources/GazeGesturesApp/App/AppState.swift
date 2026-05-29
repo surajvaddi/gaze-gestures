@@ -17,6 +17,15 @@ enum AppMode: String, CaseIterable, Identifiable {
     case emergencyExiting = "Emergency Exiting"
 
     var id: String { rawValue }
+
+    var requiresActivePermissions: Bool {
+        switch self {
+        case .armed, .handGesture, .gazeGesture, .suspended:
+            return true
+        case .idle, .blocked, .emergencyExiting:
+            return false
+        }
+    }
 }
 
 enum PermissionKind: String, CaseIterable, Identifiable {
