@@ -149,6 +149,136 @@ final class HandPresenceTests: XCTestCase {
             )
         )
     }
+
+    func testSessionControllerSinglePresentObservationDoesNotEmitStablePresent() {
+        let controller = HandPresenceSessionController(configuration: testConfiguration)
+
+        let result = controller.process(.present(confidence: 0.80, timestamp: 1))
+
+        XCTAssertNil(result)
+    }
+
+    func testSessionControllerRequiredPresentObservationsEmitStablePresent() {
+        let controller = HandPresenceSessionController(configuration: testConfiguration)
+
+        XCTAssertNil(controller.process(.present(confidence: 0.80, timestamp: 1)))
+        XCTAssertNil(controller.process(.present(confidence: 0.81, timestamp: 2)))
+        let result = controller.process(.present(confidence: 0.82, timestamp: 3))
+
+        XCTAssertEqual(result, .present(confidence: 0.82, timestamp: 3))
+    }
+
+    func testSessionControllerLowConfidencePresentDoesNotCount() {
+        let controller = HandPresenceSessionController(configuration: testConfiguration)
+
+        XCTAssertNil(controller.process(.present(confidence: 0.80, timestamp: 1)))
+        XCTAssertNil(controller.process(.present(confidence: 0.69, timestamp: 2)))
+        XCTAssertNil(controller.process(.present(confidence: 0.80, timestamp: 3)))
+        XCTAssertNil(controller.process(.present(confidence: 0.81, timestamp: 4)))
+        let result = controller.process(.present(confidence: 0.82, timestamp: 5))
+
+        XCTAssertEqual(result, .present(confidence: 0.82, timestamp: 5))
+    }
+
+    func testSessionControllerAbsentObservationResetsPresentProgress() {
+        let controller = HandPresenceSessionController(configuration: testConfiguration)
+
+        XCTAssertNil(controller.process(.present(confidence: 0.80, timestamp: 1)))
+        XCTAssertNil(controller.process(.present(confidence: 0.81, timestamp: 2)))
+        XCTAssertNil(controller.process(.absent(confidence: 0.70, timestamp: 3)))
+        XCTAssertNil(controller.process(.present(confidence: 0.82, timestamp: 4)))
+        XCTAssertNil(controller.process(.present(confidence: 0.83, timestamp: 5)))
+        let result = controller.process(.present(confidence: 0.84, timestamp: 6))
+
+        XCTAssertEqual(result, .present(confidence: 0.84, timestamp: 6))
+    }
+
+    func testSessionControllerRequiredAbsentObservationsEmitStableAbsent() {
+        let controller = HandPresenceSessionController(configuration: testConfiguration)
+
+        XCTAssertNil(controller.process(.absent(confidence: 0.70, timestamp: 1)))
+        let result = controller.process(.absent(confidence: 0.71, timestamp: 2))
+
+        XCTAssertEqual(result, .absent(confidence: 0.71, timestamp: 2))
+    }
+
+    func testSessionControllerLowConfidenceAbsentDoesNotCount() {
+        let controller = HandPresenceSessionController(configuration: testConfiguration)
+
+        XCTAssertNil(controller.process(.absent(confidence: 0.70, timestamp: 1)))
+        XCTAssertNil(controller.process(.absent(confidence: 0.59, timestamp: 2)))
+        XCTAssertNil(controller.process(.absent(confidence: 0.70, timestamp: 3)))
+        let result = controller.process(.absent(confidence: 0.71, timestamp: 4))
+
+        XCTAssertEqual(result, .absent(confidence: 0.71, timestamp: 4))
+    }
+
+    func testSessionControllerFailureObservationEmitsImmediately() {
+        let controller = HandPresenceSessionController(configuration: testConfiguration)
+
+        let result = controller.process(
+            HandPresenceObservation(
+                state: .failed("Vision request failed"),
+                confidence: 0,
+                timestamp: 1
+            )
+        )
+
+        XCTAssertEqual(
+            result,
+            HandPresenceObservation(
+                state: .failed("Vision request failed"),
+                confidence: 0,
+                timestamp: 1
+            )
+        )
+    }
+
+    func testSessionControllerUnknownObservationResetsProgressWithoutEmitting() {
+        let controller = HandPresenceSessionController(configuration: testConfiguration)
+
+        XCTAssertNil(controller.process(.present(confidence: 0.80, timestamp: 1)))
+        XCTAssertNil(controller.process(.present(confidence: 0.81, timestamp: 2)))
+        XCTAssertNil(
+            controller.process(
+                HandPresenceObservation(
+                    state: .unknown,
+                    confidence: 0,
+                    timestamp: 3
+                )
+            )
+        )
+        XCTAssertNil(controller.process(.present(confidence: 0.82, timestamp: 4)))
+        XCTAssertNil(controller.process(.present(confidence: 0.83, timestamp: 5)))
+        let result = controller.process(.present(confidence: 0.84, timestamp: 6))
+
+        XCTAssertEqual(result, .present(confidence: 0.84, timestamp: 6))
+    }
+}
+
+private let testConfiguration = HandPresenceStabilityConfiguration(
+    requiredPresentObservations: 3,
+    requiredAbsentObservations: 2,
+    minimumPresentConfidence: 0.70,
+    minimumAbsentConfidence: 0.60
+)
+
+private extension HandPresenceObservation {
+    static func present(confidence: Double, timestamp: TimeInterval) -> HandPresenceObservation {
+        HandPresenceObservation(
+            state: .present,
+            confidence: confidence,
+            timestamp: timestamp
+        )
+    }
+
+    static func absent(confidence: Double, timestamp: TimeInterval) -> HandPresenceObservation {
+        HandPresenceObservation(
+            state: .absent,
+            confidence: confidence,
+            timestamp: timestamp
+        )
+    }
 }
 
 private final class StubHandPresenceDetector: HandPresenceDetecting {
