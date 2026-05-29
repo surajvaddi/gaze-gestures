@@ -1,5 +1,12 @@
 import Foundation
 
+protocol HandPresenceDetecting: AnyObject {
+    var onObservation: ((HandPresenceObservation) -> Void)? { get set }
+
+    func startDetection()
+    func stopDetection()
+}
+
 enum HandPresenceState: Equatable {
     case unknown
     case present

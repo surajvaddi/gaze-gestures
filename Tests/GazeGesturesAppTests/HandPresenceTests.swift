@@ -74,4 +74,98 @@ final class HandPresenceTests: XCTestCase {
             )
         )
     }
+
+    func testDetectorProtocolDeliversObservationWhenRunning() {
+        let detector = StubHandPresenceDetector()
+        var received: HandPresenceObservation?
+        detector.onObservation = { observation in
+            received = observation
+        }
+
+        detector.startDetection()
+        detector.publish(
+            HandPresenceObservation(
+                state: .present,
+                confidence: 0.78,
+                timestamp: 20
+            )
+        )
+
+        XCTAssertTrue(detector.isRunning)
+        XCTAssertEqual(
+            received,
+            HandPresenceObservation(
+                state: .present,
+                confidence: 0.78,
+                timestamp: 20
+            )
+        )
+    }
+
+    func testDetectorProtocolIgnoresObservationAfterStop() {
+        let detector = StubHandPresenceDetector()
+        var receivedObservations: [HandPresenceObservation] = []
+        detector.onObservation = { observation in
+            receivedObservations.append(observation)
+        }
+
+        detector.startDetection()
+        detector.stopDetection()
+        detector.publish(
+            HandPresenceObservation(
+                state: .present,
+                confidence: 0.78,
+                timestamp: 20
+            )
+        )
+
+        XCTAssertFalse(detector.isRunning)
+        XCTAssertTrue(receivedObservations.isEmpty)
+    }
+
+    func testDetectorProtocolPropagatesFailureObservation() {
+        let detector = StubHandPresenceDetector()
+        var received: HandPresenceObservation?
+        detector.onObservation = { observation in
+            received = observation
+        }
+
+        detector.startDetection()
+        detector.publish(
+            HandPresenceObservation(
+                state: .failed("Vision request failed"),
+                confidence: 0,
+                timestamp: 30
+            )
+        )
+
+        XCTAssertEqual(received?.state.failureMessage, "Vision request failed")
+        XCTAssertEqual(
+            received,
+            HandPresenceObservation(
+                state: .failed("Vision request failed"),
+                confidence: 0,
+                timestamp: 30
+            )
+        )
+    }
+}
+
+private final class StubHandPresenceDetector: HandPresenceDetecting {
+    var onObservation: ((HandPresenceObservation) -> Void)?
+    private(set) var isRunning = false
+
+    func startDetection() {
+        isRunning = true
+    }
+
+    func stopDetection() {
+        isRunning = false
+    }
+
+    func publish(_ observation: HandPresenceObservation) {
+        guard isRunning else { return }
+
+        onObservation?(observation)
+    }
 }
