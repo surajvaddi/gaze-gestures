@@ -36,6 +36,10 @@ struct SettingsView: View {
                     "Camera session",
                     value: AppPresentation.camera(for: appState.cameraSessionState).label
                 )
+                LabeledContent(
+                    "Hand detection",
+                    value: AppPresentation.handDetection(for: appState.handDetectionState).label
+                )
             }
 
             VStack(alignment: .leading, spacing: 12) {

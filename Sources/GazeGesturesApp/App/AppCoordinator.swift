@@ -60,6 +60,7 @@ final class AppCoordinator {
 
     func stop() {
         stopHandDetection()
+        appState.handDetectionState = .idle
         cameraSessionManager.stopSession()
         hotkeyManager.stopListening()
     }
@@ -101,6 +102,7 @@ final class AppCoordinator {
             }
         case .emergencyExit:
             stopHandDetection()
+            appState.handDetectionState = .idle
             cameraSessionManager.stopSession()
             modeController.emergencyExit()
         }
@@ -115,9 +117,11 @@ final class AppCoordinator {
         case .failed(let message):
             stopHandDetection()
             modeController.emergencyExit()
+            appState.handDetectionState = .idle
             appState.lastEventDescription = "Camera failed: \(message)"
         case .idle, .stopping:
             stopHandDetection()
+            appState.handDetectionState = .idle
         case .starting, .running:
             break
         }
@@ -138,16 +142,19 @@ final class AppCoordinator {
         switch stableObservation.state {
         case .present where appState.mode == .armed:
             appState.mode = .handGesture
+            appState.handDetectionState = .detected
             appState.lastEventDescription = "Hand detected"
         case .absent where appState.mode == .handGesture:
             stopHandDetection()
             cameraSessionManager.stopSession()
             appState.mode = .idle
+            appState.handDetectionState = .lost
             appState.lastEventDescription = "Hand lost"
         case .failed(let message):
             stopHandDetection()
             cameraSessionManager.stopSession()
             appState.mode = .idle
+            appState.handDetectionState = .failed(message)
             appState.lastEventDescription = "Hand detection failed: \(message)"
         case .unknown, .present, .absent:
             break
@@ -161,6 +168,7 @@ final class AppCoordinator {
         }
 
         stopHandDetection()
+        appState.handDetectionState = .idle
         cameraSessionManager.stopSession()
         appState.mode = .blocked
     }
@@ -170,6 +178,7 @@ final class AppCoordinator {
 
         isHandDetectionRunning = true
         handPresenceSessionController.reset()
+        appState.handDetectionState = .looking
         handPresenceDetector.startDetection()
     }
 

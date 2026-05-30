@@ -28,6 +28,12 @@ struct CameraPresentation: Equatable {
     var tint: PresentationTint
 }
 
+struct HandDetectionPresentation: Equatable {
+    var label: String
+    var helpText: String
+    var tint: PresentationTint
+}
+
 enum AppPresentation {
     static func mode(
         for mode: AppMode,
@@ -135,6 +141,41 @@ enum AppPresentation {
         case .failed(let message):
             return CameraPresentation(
                 label: "Camera Failed",
+                helpText: message,
+                tint: .red
+            )
+        }
+    }
+
+    static func handDetection(for state: HandDetectionState) -> HandDetectionPresentation {
+        switch state {
+        case .idle:
+            return HandDetectionPresentation(
+                label: "Hand Idle",
+                helpText: "Hand detection is inactive.",
+                tint: .gray
+            )
+        case .looking:
+            return HandDetectionPresentation(
+                label: "Looking for Hand",
+                helpText: "Camera is running and GestureGaze is waiting for stable hand presence.",
+                tint: .cyan
+            )
+        case .detected:
+            return HandDetectionPresentation(
+                label: "Hand Detected",
+                helpText: "Stable hand presence is detected.",
+                tint: .green
+            )
+        case .lost:
+            return HandDetectionPresentation(
+                label: "Hand Lost",
+                helpText: "Stable hand absence was detected after hand mode.",
+                tint: .orange
+            )
+        case .failed(let message):
+            return HandDetectionPresentation(
+                label: "Hand Detection Failed",
                 helpText: message,
                 tint: .red
             )

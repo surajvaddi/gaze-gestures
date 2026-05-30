@@ -11,6 +11,7 @@ struct LiquidGlassStatusBar: View {
         )
         let permission = AppPresentation.permission(for: appState.permissions)
         let camera = AppPresentation.camera(for: appState.cameraSessionState)
+        let handDetection = AppPresentation.handDetection(for: appState.handDetectionState)
 
         HStack(spacing: 12) {
             statusDot(mode: mode)
@@ -72,12 +73,23 @@ struct LiquidGlassStatusBar: View {
                 .help(camera.helpText)
                 .frame(maxWidth: 130)
 
+            Text(handDetection.label)
+                .font(.system(size: 11, weight: .semibold))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(handDetection.tint.color.opacity(0.13), in: Capsule())
+                .foregroundStyle(handDetection.tint.color)
+                .help(handDetection.helpText)
+                .frame(maxWidth: 150)
+
             Text("⌃⌥⌘Space")
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 16)
-        .frame(width: 800, height: 54)
+        .frame(width: 940, height: 54)
         .contentShape(Rectangle())
         .background {
             RoundedRectangle(cornerRadius: 18, style: .continuous)

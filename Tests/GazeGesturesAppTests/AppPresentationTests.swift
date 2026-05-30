@@ -64,4 +64,21 @@ final class AppPresentationTests: XCTestCase {
         XCTAssertEqual(failed.helpText, "No camera")
         XCTAssertEqual(failed.tint, .red)
     }
+
+    func testHandDetectionPresentationCoversDetectionLifecycle() {
+        XCTAssertEqual(AppPresentation.handDetection(for: .idle).label, "Hand Idle")
+        XCTAssertEqual(AppPresentation.handDetection(for: .idle).tint, .gray)
+        XCTAssertEqual(AppPresentation.handDetection(for: .looking).label, "Looking for Hand")
+        XCTAssertEqual(AppPresentation.handDetection(for: .looking).tint, .cyan)
+        XCTAssertEqual(AppPresentation.handDetection(for: .detected).label, "Hand Detected")
+        XCTAssertEqual(AppPresentation.handDetection(for: .detected).tint, .green)
+        XCTAssertEqual(AppPresentation.handDetection(for: .lost).label, "Hand Lost")
+        XCTAssertEqual(AppPresentation.handDetection(for: .lost).tint, .orange)
+
+        let failed = AppPresentation.handDetection(for: .failed("Vision request failed"))
+
+        XCTAssertEqual(failed.label, "Hand Detection Failed")
+        XCTAssertEqual(failed.helpText, "Vision request failed")
+        XCTAssertEqual(failed.tint, .red)
+    }
 }

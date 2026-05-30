@@ -5,6 +5,7 @@ final class AppState: ObservableObject {
     @Published var lastEventDescription: String = "Ready"
     @Published var permissions = PermissionSnapshot.unknown
     @Published var cameraSessionState: CameraSessionState = .idle
+    @Published var handDetectionState: HandDetectionState = .idle
 }
 
 enum AppMode: String, CaseIterable, Identifiable {
@@ -47,6 +48,14 @@ enum CameraSessionState: Equatable {
     case starting
     case running
     case stopping
+    case failed(String)
+}
+
+enum HandDetectionState: Equatable {
+    case idle
+    case looking
+    case detected
+    case lost
     case failed(String)
 }
 

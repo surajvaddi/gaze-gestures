@@ -128,6 +128,7 @@ final class AppCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(handPresenceDetector.startCallCount, 1)
         XCTAssertTrue(handPresenceDetector.isRunning)
+        XCTAssertEqual(coordinator.appState.handDetectionState, .looking)
     }
 
     func testCameraRunningWhileIdleDoesNotStartHandDetection() {
@@ -195,6 +196,7 @@ final class AppCoordinatorTests: XCTestCase {
         handPresenceDetector.publish(.present(confidence: 1, timestamp: 4))
 
         XCTAssertEqual(coordinator.appState.mode, .handGesture)
+        XCTAssertEqual(coordinator.appState.handDetectionState, .detected)
         XCTAssertEqual(coordinator.appState.lastEventDescription, "Hand detected")
     }
 
@@ -270,6 +272,7 @@ final class AppCoordinatorTests: XCTestCase {
         handPresenceDetector.publishStableAbsent()
 
         XCTAssertEqual(coordinator.appState.mode, .idle)
+        XCTAssertEqual(coordinator.appState.handDetectionState, .lost)
         XCTAssertEqual(coordinator.appState.lastEventDescription, "Hand lost")
         XCTAssertEqual(cameraSessionManager.stopCallCount, 1)
         XCTAssertEqual(handPresenceDetector.stopCallCount, 1)
@@ -324,6 +327,7 @@ final class AppCoordinatorTests: XCTestCase {
         )
 
         XCTAssertEqual(coordinator.appState.mode, .idle)
+        XCTAssertEqual(coordinator.appState.handDetectionState, .failed("Vision request failed"))
         XCTAssertEqual(coordinator.appState.lastEventDescription, "Hand detection failed: Vision request failed")
         XCTAssertEqual(cameraSessionManager.stopCallCount, 1)
         XCTAssertEqual(handPresenceDetector.stopCallCount, 1)
@@ -488,6 +492,7 @@ final class AppCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(handPresenceDetector.stopCallCount, 1)
         XCTAssertFalse(handPresenceDetector.isRunning)
+        XCTAssertEqual(coordinator.appState.handDetectionState, .idle)
     }
 }
 
