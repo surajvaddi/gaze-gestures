@@ -201,6 +201,259 @@ This step adds camera lifecycle plumbing without Vision or gesture detection:
 - add palm-flip toggle, coarse gaze target, gaze orb, and hand-confirmed gaze actions
 - keep gaze disabled by default under low battery or constrained performance
 
+#### Phase 11 Gaze Detection Specification
+
+Phase 11 adds gaze as an experimental target-selection layer. It must not replace
+the hand cursor or become a direct mouse pointer in its first release. Gaze selects
+a coarse target or region; deliberate hand gestures confirm actions.
+
+##### Product Rules
+
+- gaze mode is disabled by default
+- gaze mode requires an explicit experimental setting
+- gaze mode requires camera and Accessibility permissions
+- gaze mode requires successful gaze calibration before actions are enabled
+- gaze tracking runs only while the app is active and in `gazeGesture`
+- gaze actions require hand confirmation
+- gaze must be disabled automatically in low-battery or constrained-performance states
+- emergency exit stops gaze tracking, hides the gaze orb, clears gaze buffers, and returns to `Idle`
+
+##### Non-Goals
+
+- do not treat webcam gaze as pixel-perfect mouse control
+- do not dispatch actions from gaze alone
+- do not run always-on face or gaze tracking
+- do not store raw camera frames by default
+- do not enable destructive actions through a single gaze-confirmed gesture
+
+##### Core Types
+
+Planned domain types:
+
+```swift
+enum GazeDetectionState: Equatable {
+    case idle
+    case calibrationRequired
+    case calibrating
+    case looking
+    case tracking
+    case lowConfidence
+    case locked
+    case failed(String)
+}
+
+struct GazeObservation: Equatable {
+    var faceConfidence: Double
+    var eyeConfidence: Double
+    var headPoseConfidence: Double
+    var rawCameraPoint: UnitPoint?
+    var rawScreenPoint: CGPoint?
+    var calibratedScreenPoint: CGPoint?
+    var smoothedScreenPoint: CGPoint?
+    var coarseRegion: GazeRegion
+    var stabilityScore: Double
+    var dwellDuration: TimeInterval
+    var timestamp: TimeInterval
+}
+
+enum GazeRegion: Equatable {
+    case unknown
+    case topLeft
+    case topCenter
+    case topRight
+    case centerLeft
+    case center
+    case centerRight
+    case bottomLeft
+    case bottomCenter
+    case bottomRight
+}
+
+struct GazeCalibrationProfile: Equatable, Codable {
+    var screenID: String
+    var createdAt: Date
+    var points: [GazeCalibrationPoint]
+    var qualityScore: Double
+    var mappingVersion: Int
+}
+```
+
+##### Protocol Boundaries
+
+Planned protocols:
+
+```swift
+protocol GazeDetecting: AnyObject {
+    var onObservation: ((GazeObservation) -> Void)? { get set }
+
+    func startDetection(profile: GazeCalibrationProfile?)
+    func stopDetection()
+    func process(_ frame: CameraFrame)
+}
+
+protocol GazeCalibrating: AnyObject {
+    var onProgress: ((GazeCalibrationProgress) -> Void)? { get set }
+
+    func beginCalibration(screenFrame: CGRect)
+    func recordSample(for target: GazeCalibrationTarget, frame: CameraFrame)
+    func finishCalibration() -> Result<GazeCalibrationProfile, GazeCalibrationError>
+    func resetCalibration()
+}
+
+protocol GazeSmoothing {
+    func smooth(_ observation: GazeObservation) -> GazeObservation
+    func reset()
+}
+```
+
+##### Detection Pipeline
+
+1. Activation hotkey enters `Armed`.
+2. Stable hand presence enters `handGesture`.
+3. Palm flip toggles experimental gaze mode only when enabled in Settings.
+4. Coordinator verifies calibration exists and power policy allows gaze tracking.
+5. Camera frames are routed to the gaze detector.
+6. Vision face/eye landmarks produce raw face, eye, and head-pose signals.
+7. Raw signals map to a coarse gaze region first.
+8. If calibration exists, raw gaze maps to a calibrated screen point.
+9. Smoothing converts raw/calibrated points into a stable target.
+10. Target snapping may bias the gaze orb toward nearby interactable UI targets.
+11. Hand gestures confirm actions at the current gaze target.
+
+##### Calibration Flow
+
+Calibration is mandatory before gaze actions are enabled.
+
+```text
+1. Show calibration overlay.
+2. Ask the user to look at 9 screen targets.
+3. Collect multiple face/eye samples per target.
+4. Reject samples with low face or eye confidence.
+5. Compute coarse-region and screen-point mapping.
+6. Save calibration profile locally.
+7. Require recalibration when screen layout or camera position changes significantly.
+```
+
+Calibration quality gates:
+
+- minimum 9 targets completed
+- minimum 5 accepted samples per target
+- face confidence must be at least 0.70
+- eye confidence must be at least 0.65
+- calibration quality score must be at least 0.75
+- failed calibration leaves gaze mode disabled and shows a reset/retry path
+
+##### Confidence And Safety Gates
+
+Gaze observations are actionable only when:
+
+- mode is `gazeGesture`
+- experimental gaze setting is enabled
+- calibration profile is valid
+- power policy allows gaze tracking
+- face confidence is at least 0.70
+- eye confidence is at least 0.65
+- stability score is at least 0.70
+- no emergency exit is active
+- action is confirmed by a hand gesture
+- cooldown allows the action
+
+Low-confidence behavior:
+
+- fade the gaze orb
+- keep the last stable target briefly
+- block new actions
+- return to `looking` if confidence remains low
+- exit gaze mode after sustained tracking loss
+
+##### Gaze Orb UI States
+
+Planned overlay states:
+
+```swift
+enum GazeOrbState: Equatable {
+    case hidden
+    case calibrationRequired
+    case searching
+    case tracking(confidence: Double)
+    case lowConfidence
+    case locked
+    case confirming
+    case cooldown
+    case failed(String)
+}
+```
+
+Display rules:
+
+- hidden outside `gazeGesture`
+- searching while face or eyes are not stable
+- tracking when a smoothed target exists
+- low confidence when signals drop below thresholds
+- locked when fist lock is active
+- confirming when a hand gesture is being used to act on the target
+- cooldown after a dispatched action
+
+##### Actions
+
+Gaze mode actions are target selection plus hand confirmation:
+
+| Input | Gaze Mode Meaning |
+|---|---|
+| Palm flip | Exit gaze mode |
+| Pinch tap | Click at gaze target |
+| Pinch hold | Prepare drag from gaze target |
+| Pinch hold and move | Drag from locked gaze target |
+| Swipe up or down | Scroll near gaze target |
+| Fist | Lock or unlock gaze target |
+| Open palm | Cancel current gaze action |
+
+All actions must pass the existing gesture-router safety rules, cooldowns, and
+destructive-confirmation requirements.
+
+##### Settings
+
+Planned Settings entries:
+
+- Enable experimental gaze mode
+- Require calibration
+- Start gaze calibration
+- Reset gaze calibration
+- Gaze smoothing: Conservative, Normal, Responsive
+- Gaze orb size: Small, Medium, Large
+- Disable gaze on low battery
+- Show gaze confidence indicator
+
+##### Tests Required Before Enabling Phase 11
+
+- gaze mode cannot start when the experimental setting is off
+- gaze mode cannot start without calibration
+- failed calibration keeps gaze actions disabled
+- low face confidence produces `lowConfidence`
+- low eye confidence produces `lowConfidence`
+- valid calibrated observation produces a smoothed target
+- sustained tracking loss exits gaze mode
+- emergency exit stops gaze detection and hides the orb
+- gaze alone cannot dispatch actions
+- hand-confirmed pinch can dispatch only when gaze confidence and cooldown gates pass
+- destructive actions still require multi-step confirmation
+- low-battery policy disables gaze tracking
+- calibration profile persists and can be reset
+
+##### Acceptance Criteria
+
+Phase 11 is complete only when:
+
+- gaze mode is opt-in and off by default
+- calibration is required and locally persisted
+- camera frames can drive face/eye landmark observations
+- gaze maps to coarse regions before precise target snapping
+- gaze orb communicates searching, tracking, low-confidence, locked, and cooldown states
+- hand-confirmed click at gaze target works in a guarded test path
+- no action fires from gaze alone
+- emergency exit reliably stops gaze, hand detection, camera, and overlay state
+- `swift test` covers the pipeline, gates, calibration, and failure paths
+
 ## Directory Layout
 
 ```text
