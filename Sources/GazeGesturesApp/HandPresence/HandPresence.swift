@@ -5,6 +5,7 @@ protocol HandPresenceDetecting: AnyObject {
 
     func startDetection()
     func stopDetection()
+    func process(_ frame: CameraFrame)
 }
 
 enum HandPresenceState: Equatable {

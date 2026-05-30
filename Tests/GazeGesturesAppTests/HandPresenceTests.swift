@@ -298,4 +298,6 @@ private final class StubHandPresenceDetector: HandPresenceDetecting {
 
         onObservation?(observation)
     }
+
+    func process(_ frame: CameraFrame) {}
 }
