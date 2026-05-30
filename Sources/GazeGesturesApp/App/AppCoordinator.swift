@@ -6,18 +6,22 @@ final class AppCoordinator {
     private let permissionProvider: PermissionProviding
     private let hotkeyManager: HotkeyManaging
     private let cameraSessionManager: CameraSessionManaging
+    private let handPresenceDetector: HandPresenceDetecting
     private let modeController: ModeController
+    private var isHandDetectionRunning = false
 
     init(
         appState: AppState = AppState(),
         permissionProvider: PermissionProviding,
         hotkeyManager: HotkeyManaging,
-        cameraSessionManager: CameraSessionManaging
+        cameraSessionManager: CameraSessionManaging,
+        handPresenceDetector: HandPresenceDetecting = VisionHandPresenceDetector()
     ) {
         self.appState = appState
         self.permissionProvider = permissionProvider
         self.hotkeyManager = hotkeyManager
         self.cameraSessionManager = cameraSessionManager
+        self.handPresenceDetector = handPresenceDetector
         self.modeController = ModeController(
             appState: appState,
             permissionProvider: permissionProvider
@@ -29,6 +33,10 @@ final class AppCoordinator {
 
         cameraSessionManager.onStateChange = { [weak self] state in
             self?.handleCameraStateChange(state)
+        }
+
+        cameraSessionManager.onFrame = { [weak self] frame in
+            self?.handleCameraFrame(frame)
         }
 
         hotkeyManager.onHotkey = { [weak self] hotkey in
@@ -44,6 +52,7 @@ final class AppCoordinator {
     }
 
     func stop() {
+        stopHandDetection()
         cameraSessionManager.stopSession()
         hotkeyManager.stopListening()
     }
@@ -84,6 +93,7 @@ final class AppCoordinator {
                 cameraSessionManager.startSession()
             }
         case .emergencyExit:
+            stopHandDetection()
             cameraSessionManager.stopSession()
             modeController.emergencyExit()
         }
@@ -92,10 +102,24 @@ final class AppCoordinator {
     private func handleCameraStateChange(_ state: CameraSessionState) {
         appState.cameraSessionState = state
 
-        if case .failed(let message) = state {
+        switch state {
+        case .running where appState.mode == .armed:
+            startHandDetection()
+        case .failed(let message):
+            stopHandDetection()
             modeController.emergencyExit()
             appState.lastEventDescription = "Camera failed: \(message)"
+        case .idle, .stopping:
+            stopHandDetection()
+        case .starting, .running:
+            break
         }
+    }
+
+    private func handleCameraFrame(_ frame: CameraFrame) {
+        guard isHandDetectionRunning else { return }
+
+        handPresenceDetector.process(frame)
     }
 
     private func handleRequiredPermissionLoss() {
@@ -104,7 +128,22 @@ final class AppCoordinator {
             return
         }
 
+        stopHandDetection()
         cameraSessionManager.stopSession()
         appState.mode = .blocked
+    }
+
+    private func startHandDetection() {
+        guard !isHandDetectionRunning else { return }
+
+        isHandDetectionRunning = true
+        handPresenceDetector.startDetection()
+    }
+
+    private func stopHandDetection() {
+        guard isHandDetectionRunning else { return }
+
+        isHandDetectionRunning = false
+        handPresenceDetector.stopDetection()
     }
 }

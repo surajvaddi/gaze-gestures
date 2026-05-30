@@ -108,23 +108,91 @@ final class AppCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.appState.cameraSessionState, .running)
     }
 
-    func testCameraFailureReturnsToIdleAndSurfacesMessage() {
+    func testCameraRunningWhileArmedStartsHandDetection() {
+        let hotkeyManager = CoordinatorHotkeyManager()
         let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let coordinator = AppCoordinator(
+            permissionProvider: CoordinatorPermissionProvider(
+                snapshot: PermissionSnapshot(camera: .granted, accessibility: .granted)
+            ),
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        cameraSessionManager.publish(.running)
+
+        XCTAssertEqual(handPresenceDetector.startCallCount, 1)
+        XCTAssertTrue(handPresenceDetector.isRunning)
+    }
+
+    func testCameraRunningWhileIdleDoesNotStartHandDetection() {
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
         let coordinator = AppCoordinator(
             permissionProvider: CoordinatorPermissionProvider(
                 snapshot: PermissionSnapshot(camera: .granted, accessibility: .granted)
             ),
             hotkeyManager: CoordinatorHotkeyManager(),
-            cameraSessionManager: cameraSessionManager
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector
+        )
+
+        coordinator.start()
+        cameraSessionManager.publish(.running)
+
+        XCTAssertEqual(coordinator.appState.mode, .idle)
+        XCTAssertEqual(handPresenceDetector.startCallCount, 0)
+    }
+
+    func testCameraFramesForwardOnlyAfterHandDetectionStarts() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let coordinator = AppCoordinator(
+            permissionProvider: CoordinatorPermissionProvider(
+                snapshot: PermissionSnapshot(camera: .granted, accessibility: .granted)
+            ),
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector
+        )
+
+        coordinator.start()
+        cameraSessionManager.publishFrame(timestamp: 1)
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publishFrame(timestamp: 2)
+        cameraSessionManager.publish(.running)
+        cameraSessionManager.publishFrame(timestamp: 3)
+
+        XCTAssertEqual(handPresenceDetector.processedFrameTimestamps, [3])
+    }
+
+    func testCameraFailureReturnsToIdleAndSurfacesMessage() {
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let coordinator = AppCoordinator(
+            permissionProvider: CoordinatorPermissionProvider(
+                snapshot: PermissionSnapshot(camera: .granted, accessibility: .granted)
+            ),
+            hotkeyManager: CoordinatorHotkeyManager(),
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector
         )
 
         coordinator.start()
         coordinator.appState.mode = .armed
+        cameraSessionManager.publish(.running)
         cameraSessionManager.publish(.failed("No video camera is available"))
 
         XCTAssertEqual(coordinator.appState.mode, .idle)
         XCTAssertEqual(coordinator.appState.cameraSessionState, .failed("No video camera is available"))
         XCTAssertEqual(coordinator.appState.lastEventDescription, "Camera failed: No video camera is available")
+        XCTAssertEqual(handPresenceDetector.stopCallCount, 1)
     }
 
     func testPermissionActionsUpdateState() {
@@ -192,16 +260,44 @@ final class AppCoordinatorTests: XCTestCase {
     func testStopStopsHotkeysAndCamera() {
         let hotkeyManager = CoordinatorHotkeyManager()
         let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
         let coordinator = AppCoordinator(
             permissionProvider: CoordinatorPermissionProvider(snapshot: .unknown),
             hotkeyManager: hotkeyManager,
-            cameraSessionManager: cameraSessionManager
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector
         )
 
+        coordinator.start()
+        coordinator.appState.mode = .armed
+        cameraSessionManager.publish(.running)
         coordinator.stop()
 
         XCTAssertTrue(hotkeyManager.didStopListening)
         XCTAssertEqual(cameraSessionManager.stopCallCount, 1)
+        XCTAssertEqual(handPresenceDetector.stopCallCount, 1)
+    }
+
+    func testEmergencyExitStopsHandDetection() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let coordinator = AppCoordinator(
+            permissionProvider: CoordinatorPermissionProvider(
+                snapshot: PermissionSnapshot(camera: .granted, accessibility: .granted)
+            ),
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        hotkeyManager.fire(.emergencyExit)
+
+        XCTAssertEqual(handPresenceDetector.stopCallCount, 1)
+        XCTAssertFalse(handPresenceDetector.isRunning)
     }
 }
 
@@ -268,5 +364,38 @@ private final class CoordinatorCameraSessionManager: CameraSessionManaging {
 
     func publish(_ state: CameraSessionState) {
         onStateChange?(state)
+    }
+
+    func publishFrame(timestamp: TimeInterval) {
+        onFrame?(
+            CameraFrame(
+                sampleBuffer: nil,
+                timestamp: timestamp
+            )
+        )
+    }
+}
+
+private final class CoordinatorHandPresenceDetector: HandPresenceDetecting {
+    var onObservation: ((HandPresenceObservation) -> Void)?
+    private(set) var startCallCount = 0
+    private(set) var stopCallCount = 0
+    private(set) var processedFrameTimestamps: [TimeInterval] = []
+    private(set) var isRunning = false
+
+    func startDetection() {
+        startCallCount += 1
+        isRunning = true
+    }
+
+    func stopDetection() {
+        stopCallCount += 1
+        isRunning = false
+    }
+
+    func process(_ frame: CameraFrame) {
+        guard isRunning else { return }
+
+        processedFrameTimestamps.append(frame.timestamp)
     }
 }
