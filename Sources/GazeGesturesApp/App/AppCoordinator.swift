@@ -7,6 +7,7 @@ final class AppCoordinator {
     private let hotkeyManager: HotkeyManaging
     private let cameraSessionManager: CameraSessionManaging
     private let handPresenceDetector: HandPresenceDetecting
+    private let handPresenceSessionController: HandPresenceSessionController
     private let modeController: ModeController
     private var isHandDetectionRunning = false
 
@@ -15,13 +16,15 @@ final class AppCoordinator {
         permissionProvider: PermissionProviding,
         hotkeyManager: HotkeyManaging,
         cameraSessionManager: CameraSessionManaging,
-        handPresenceDetector: HandPresenceDetecting = VisionHandPresenceDetector()
+        handPresenceDetector: HandPresenceDetecting = VisionHandPresenceDetector(),
+        handPresenceSessionController: HandPresenceSessionController = HandPresenceSessionController()
     ) {
         self.appState = appState
         self.permissionProvider = permissionProvider
         self.hotkeyManager = hotkeyManager
         self.cameraSessionManager = cameraSessionManager
         self.handPresenceDetector = handPresenceDetector
+        self.handPresenceSessionController = handPresenceSessionController
         self.modeController = ModeController(
             appState: appState,
             permissionProvider: permissionProvider
@@ -37,6 +40,10 @@ final class AppCoordinator {
 
         cameraSessionManager.onFrame = { [weak self] frame in
             self?.handleCameraFrame(frame)
+        }
+
+        handPresenceDetector.onObservation = { [weak self] observation in
+            self?.handleHandPresenceObservation(observation)
         }
 
         hotkeyManager.onHotkey = { [weak self] hotkey in
@@ -122,6 +129,31 @@ final class AppCoordinator {
         handPresenceDetector.process(frame)
     }
 
+    private func handleHandPresenceObservation(_ observation: HandPresenceObservation) {
+        guard isHandDetectionRunning,
+              let stableObservation = handPresenceSessionController.process(observation) else {
+            return
+        }
+
+        switch stableObservation.state {
+        case .present where appState.mode == .armed:
+            appState.mode = .handGesture
+            appState.lastEventDescription = "Hand detected"
+        case .absent where appState.mode == .handGesture:
+            stopHandDetection()
+            cameraSessionManager.stopSession()
+            appState.mode = .idle
+            appState.lastEventDescription = "Hand lost"
+        case .failed(let message):
+            stopHandDetection()
+            cameraSessionManager.stopSession()
+            appState.mode = .idle
+            appState.lastEventDescription = "Hand detection failed: \(message)"
+        case .unknown, .present, .absent:
+            break
+        }
+    }
+
     private func handleRequiredPermissionLoss() {
         guard appState.mode.requiresActivePermissions,
               !appState.permissions.canEnterGestureMode else {
@@ -137,6 +169,7 @@ final class AppCoordinator {
         guard !isHandDetectionRunning else { return }
 
         isHandDetectionRunning = true
+        handPresenceSessionController.reset()
         handPresenceDetector.startDetection()
     }
 
@@ -144,6 +177,7 @@ final class AppCoordinator {
         guard isHandDetectionRunning else { return }
 
         isHandDetectionRunning = false
+        handPresenceSessionController.reset()
         handPresenceDetector.stopDetection()
     }
 }

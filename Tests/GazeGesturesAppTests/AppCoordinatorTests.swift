@@ -172,6 +172,196 @@ final class AppCoordinatorTests: XCTestCase {
         XCTAssertEqual(handPresenceDetector.processedFrameTimestamps, [3])
     }
 
+    func testStableHandPresenceTransitionsArmedToHandGesture() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let coordinator = AppCoordinator(
+            permissionProvider: CoordinatorPermissionProvider(
+                snapshot: PermissionSnapshot(camera: .granted, accessibility: .granted)
+            ),
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+
+        handPresenceDetector.publish(.present(confidence: 1, timestamp: 1))
+        handPresenceDetector.publish(.present(confidence: 1, timestamp: 2))
+        handPresenceDetector.publish(.present(confidence: 1, timestamp: 3))
+        handPresenceDetector.publish(.present(confidence: 1, timestamp: 4))
+
+        XCTAssertEqual(coordinator.appState.mode, .handGesture)
+        XCTAssertEqual(coordinator.appState.lastEventDescription, "Hand detected")
+    }
+
+    func testInsufficientHandPresenceDoesNotTransitionToHandGesture() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let coordinator = AppCoordinator(
+            permissionProvider: CoordinatorPermissionProvider(
+                snapshot: PermissionSnapshot(camera: .granted, accessibility: .granted)
+            ),
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+
+        handPresenceDetector.publish(.present(confidence: 1, timestamp: 1))
+        handPresenceDetector.publish(.present(confidence: 1, timestamp: 2))
+        handPresenceDetector.publish(.present(confidence: 1, timestamp: 3))
+
+        XCTAssertEqual(coordinator.appState.mode, .armed)
+        XCTAssertEqual(coordinator.appState.lastEventDescription, "Activation hotkey accepted")
+    }
+
+    func testNoisyHandPresenceDoesNotTransitionToHandGesture() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let coordinator = AppCoordinator(
+            permissionProvider: CoordinatorPermissionProvider(
+                snapshot: PermissionSnapshot(camera: .granted, accessibility: .granted)
+            ),
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+
+        handPresenceDetector.publish(.present(confidence: 1, timestamp: 1))
+        handPresenceDetector.publish(.present(confidence: 1, timestamp: 2))
+        handPresenceDetector.publish(.absent(confidence: 1, timestamp: 3))
+        handPresenceDetector.publish(.present(confidence: 1, timestamp: 4))
+        handPresenceDetector.publish(.present(confidence: 1, timestamp: 5))
+
+        XCTAssertEqual(coordinator.appState.mode, .armed)
+    }
+
+    func testStableAbsenceExitsHandGestureAndStopsCamera() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let coordinator = AppCoordinator(
+            permissionProvider: CoordinatorPermissionProvider(
+                snapshot: PermissionSnapshot(camera: .granted, accessibility: .granted)
+            ),
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+
+        handPresenceDetector.publishStablePresent()
+        handPresenceDetector.publishStableAbsent()
+
+        XCTAssertEqual(coordinator.appState.mode, .idle)
+        XCTAssertEqual(coordinator.appState.lastEventDescription, "Hand lost")
+        XCTAssertEqual(cameraSessionManager.stopCallCount, 1)
+        XCTAssertEqual(handPresenceDetector.stopCallCount, 1)
+    }
+
+    func testStableAbsenceWhileArmedDoesNotEnterHandGesture() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let coordinator = AppCoordinator(
+            permissionProvider: CoordinatorPermissionProvider(
+                snapshot: PermissionSnapshot(camera: .granted, accessibility: .granted)
+            ),
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+
+        handPresenceDetector.publishStableAbsent()
+
+        XCTAssertEqual(coordinator.appState.mode, .armed)
+        XCTAssertEqual(cameraSessionManager.stopCallCount, 0)
+    }
+
+    func testHandDetectionFailureExitsToIdleAndStopsCamera() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let coordinator = AppCoordinator(
+            permissionProvider: CoordinatorPermissionProvider(
+                snapshot: PermissionSnapshot(camera: .granted, accessibility: .granted)
+            ),
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+
+        handPresenceDetector.publish(
+            HandPresenceObservation(
+                state: .failed("Vision request failed"),
+                confidence: 0,
+                timestamp: 1
+            )
+        )
+
+        XCTAssertEqual(coordinator.appState.mode, .idle)
+        XCTAssertEqual(coordinator.appState.lastEventDescription, "Hand detection failed: Vision request failed")
+        XCTAssertEqual(cameraSessionManager.stopCallCount, 1)
+        XCTAssertEqual(handPresenceDetector.stopCallCount, 1)
+    }
+
+    func testEmergencyExitResetsHandPresenceStability() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let coordinator = AppCoordinator(
+            permissionProvider: CoordinatorPermissionProvider(
+                snapshot: PermissionSnapshot(camera: .granted, accessibility: .granted)
+            ),
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        handPresenceDetector.publish(.present(confidence: 1, timestamp: 1))
+        handPresenceDetector.publish(.present(confidence: 1, timestamp: 2))
+
+        hotkeyManager.fire(.emergencyExit)
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        handPresenceDetector.publish(.present(confidence: 1, timestamp: 3))
+        handPresenceDetector.publish(.present(confidence: 1, timestamp: 4))
+
+        XCTAssertEqual(coordinator.appState.mode, .armed)
+
+        handPresenceDetector.publish(.present(confidence: 1, timestamp: 5))
+        handPresenceDetector.publish(.present(confidence: 1, timestamp: 6))
+
+        XCTAssertEqual(coordinator.appState.mode, .handGesture)
+    }
+
     func testCameraFailureReturnsToIdleAndSurfacesMessage() {
         let cameraSessionManager = CoordinatorCameraSessionManager()
         let handPresenceDetector = CoordinatorHandPresenceDetector()
@@ -397,5 +587,41 @@ private final class CoordinatorHandPresenceDetector: HandPresenceDetecting {
         guard isRunning else { return }
 
         processedFrameTimestamps.append(frame.timestamp)
+    }
+
+    func publish(_ observation: HandPresenceObservation) {
+        guard isRunning else { return }
+
+        onObservation?(observation)
+    }
+
+    func publishStablePresent() {
+        for index in 1...4 {
+            publish(.present(confidence: 1, timestamp: TimeInterval(index)))
+        }
+    }
+
+    func publishStableAbsent() {
+        for index in 1...12 {
+            publish(.absent(confidence: 1, timestamp: TimeInterval(index)))
+        }
+    }
+}
+
+private extension HandPresenceObservation {
+    static func present(confidence: Double, timestamp: TimeInterval) -> HandPresenceObservation {
+        HandPresenceObservation(
+            state: .present,
+            confidence: confidence,
+            timestamp: timestamp
+        )
+    }
+
+    static func absent(confidence: Double, timestamp: TimeInterval) -> HandPresenceObservation {
+        HandPresenceObservation(
+            state: .absent,
+            confidence: confidence,
+            timestamp: timestamp
+        )
     }
 }
