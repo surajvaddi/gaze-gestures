@@ -203,6 +203,15 @@ final class ClickDispatchTests: XCTestCase {
         )
         XCTAssertEqual(dispatcher.leftClickPoints, [])
     }
+
+    func testCGEventClickDispatcherRejectsWhenAccessibilityIsNotTrusted() {
+        let dispatcher = CGEventClickDispatcher(accessibilityTrusted: { false })
+
+        XCTAssertEqual(
+            dispatcher.dispatchLeftClick(at: ScreenPoint(x: 10, y: 20)).failure,
+            .accessibilityNotTrusted
+        )
+    }
 }
 
 private extension Result where Success == Void, Failure == ClickDispatchError {

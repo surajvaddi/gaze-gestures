@@ -2,6 +2,7 @@ import ApplicationServices
 import Foundation
 
 enum ClickDispatchError: Error, Equatable {
+    case accessibilityNotTrusted
     case eventCreationFailed
 }
 
@@ -104,8 +105,18 @@ final class PinchClickIntentTracker {
 }
 
 final class CGEventClickDispatcher: ClickDispatching {
+    private let accessibilityTrusted: () -> Bool
+
+    init(accessibilityTrusted: @escaping () -> Bool = { AXIsProcessTrusted() }) {
+        self.accessibilityTrusted = accessibilityTrusted
+    }
+
     @discardableResult
     func dispatchLeftClick(at point: ScreenPoint) -> Result<Void, ClickDispatchError> {
+        guard accessibilityTrusted() else {
+            return .failure(.accessibilityNotTrusted)
+        }
+
         let cgPoint = CGPoint(x: point.x, y: point.y)
 
         guard let mouseDown = CGEvent(
