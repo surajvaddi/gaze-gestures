@@ -5,6 +5,7 @@ final class OverlayWindowController {
     private let appState: AppState
     private let onOpenSettings: () -> Void
     private var window: NSWindow?
+    private var cursorWindow: NSWindow?
 
     init(
         appState: AppState,
@@ -17,8 +18,11 @@ final class OverlayWindowController {
     func show() {
         if let window {
             window.orderFrontRegardless()
+            cursorWindow?.orderFrontRegardless()
             return
         }
+
+        showCursorWindow()
 
         let hostingController = NSHostingController(
             rootView: LiquidGlassStatusBar(
@@ -48,6 +52,48 @@ final class OverlayWindowController {
 
         self.window = window
         position(window)
+        window.orderFrontRegardless()
+    }
+
+    private func showCursorWindow() {
+        guard let screen = NSScreen.main else { return }
+
+        let frame = screen.frame
+        let bounds = ScreenBounds(
+            origin: ScreenPoint(
+                x: Double(frame.origin.x),
+                y: Double(frame.origin.y)
+            ),
+            width: Double(frame.width),
+            height: Double(frame.height)
+        )
+        let hostingController = NSHostingController(
+            rootView: PinchCursorOverlayView(
+                appState: appState,
+                screenBounds: bounds
+            )
+        )
+        let window = NSWindow(
+            contentRect: frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+
+        window.contentViewController = hostingController
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.hasShadow = false
+        window.ignoresMouseEvents = true
+        window.level = .floating
+        window.collectionBehavior = [
+            .canJoinAllSpaces,
+            .fullScreenAuxiliary,
+            .stationary,
+            .ignoresCycle
+        ]
+
+        cursorWindow = window
         window.orderFrontRegardless()
     }
 
