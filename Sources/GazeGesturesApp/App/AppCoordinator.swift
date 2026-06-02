@@ -295,22 +295,27 @@ final class AppCoordinator {
         guard !isHandLandmarkDetectionRunning else { return }
 
         isHandLandmarkDetectionRunning = true
-        pinchStabilityController.reset()
-        pinchCursorSmoother.reset()
+        resetPinchPipelineState()
         handLandmarkDetector.startDetection()
     }
 
     private func stopHandLandmarkDetection() {
         guard isHandLandmarkDetectionRunning else {
-            hidePinchCursor()
+            resetPinchPipelineState()
             return
         }
 
         isHandLandmarkDetectionRunning = false
-        pinchStabilityController.reset()
-        pinchCursorSmoother.reset()
         handLandmarkDetector.stopDetection()
-        hidePinchCursor()
+        resetPinchPipelineState()
+    }
+
+    private func resetPinchPipelineState() {
+        pinchStabilityController.reset()
+        pinchObservationBuffer.reset()
+        pinchCooldownController.reset()
+        pinchCursorSmoother.reset()
+        appState.virtualCursorState = .hidden
     }
 
     private func hidePinchCursor() {

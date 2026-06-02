@@ -649,6 +649,162 @@ final class AppCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.appState.lastEventDescription, "Pinch released")
     }
 
+    func testEmergencyExitClearsPinchCooldownAndCursorState() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let handLandmarkDetector = CoordinatorHandLandmarkDetector()
+        let coordinator = pinchCoordinator(
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector,
+            handLandmarkDetector: handLandmarkDetector
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        handPresenceDetector.publishStablePresent()
+        handLandmarkDetector.publish(.pinching(timestamp: 80))
+        handLandmarkDetector.publish(.pinching(timestamp: 80.10))
+        handLandmarkDetector.publish(.open(timestamp: 80.20))
+        handLandmarkDetector.publish(.open(timestamp: 80.40))
+        hotkeyManager.fire(.emergencyExit)
+
+        XCTAssertEqual(coordinator.appState.virtualCursorState, .hidden)
+
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        handPresenceDetector.publishStablePresent()
+        handLandmarkDetector.publish(.pinching(timestamp: 80.35))
+        handLandmarkDetector.publish(.pinching(timestamp: 80.36))
+
+        guard case .visible = coordinator.appState.virtualCursorState else {
+            XCTFail("Expected cursor to become visible after emergency reset")
+            return
+        }
+    }
+
+    func testStopClearsPinchCursorState() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let handLandmarkDetector = CoordinatorHandLandmarkDetector()
+        let coordinator = pinchCoordinator(
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector,
+            handLandmarkDetector: handLandmarkDetector
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        handPresenceDetector.publishStablePresent()
+        handLandmarkDetector.publish(.pinching(timestamp: 60))
+        handLandmarkDetector.publish(.pinching(timestamp: 60.10))
+        coordinator.stop()
+
+        XCTAssertEqual(coordinator.appState.virtualCursorState, .hidden)
+    }
+
+    func testCameraFailureClearsPinchCursorState() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let handLandmarkDetector = CoordinatorHandLandmarkDetector()
+        let coordinator = pinchCoordinator(
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector,
+            handLandmarkDetector: handLandmarkDetector
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        handPresenceDetector.publishStablePresent()
+        handLandmarkDetector.publish(.pinching(timestamp: 60))
+        handLandmarkDetector.publish(.pinching(timestamp: 60.10))
+        cameraSessionManager.publish(.failed("No video camera is available"))
+
+        XCTAssertEqual(coordinator.appState.virtualCursorState, .hidden)
+    }
+
+    func testPermissionLossClearsPinchCursorState() {
+        let permissionProvider = CoordinatorPermissionProvider(
+            snapshot: PermissionSnapshot(camera: .granted, accessibility: .granted)
+        )
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let handLandmarkDetector = CoordinatorHandLandmarkDetector()
+        let coordinator = AppCoordinator(
+            permissionProvider: permissionProvider,
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector,
+            handLandmarkDetector: handLandmarkDetector,
+            pinchObservationBuffer: PinchObservationBuffer(
+                configuration: PinchObservationBufferConfiguration(capacity: 2)
+            ),
+            temporalPinchClassifier: TemporalPinchClassifier(
+                configuration: TemporalPinchClassifierConfiguration(
+                    requiredPinchingObservations: 2,
+                    requiredOpenObservations: 2,
+                    minimumAverageConfidence: 0.70
+                )
+            ),
+            pinchCursorMapper: PinchCursorMapper(
+                configuration: PinchCursorMappingConfiguration(
+                    minimumConfidence: 0.65,
+                    mirrorsHorizontally: false,
+                    invertsVertically: false,
+                    requiredState: .pinching
+                )
+            ),
+            pinchCursorSmoother: PinchCursorSmoother(
+                configuration: PinchCursorSmoothingConfiguration(interpolationFactor: 1)
+            ),
+            screenBoundsProvider: CoordinatorScreenBoundsProvider()
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        handPresenceDetector.publishStablePresent()
+        handLandmarkDetector.publish(.pinching(timestamp: 60))
+        handLandmarkDetector.publish(.pinching(timestamp: 60.10))
+        permissionProvider.snapshot = PermissionSnapshot(camera: .denied, accessibility: .granted)
+        coordinator.refreshPermissions()
+
+        XCTAssertEqual(coordinator.appState.virtualCursorState, .hidden)
+    }
+
+    func testHandLostClearsPinchCursorState() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let handLandmarkDetector = CoordinatorHandLandmarkDetector()
+        let coordinator = pinchCoordinator(
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector,
+            handLandmarkDetector: handLandmarkDetector
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        handPresenceDetector.publishStablePresent()
+        handLandmarkDetector.publish(.pinching(timestamp: 60))
+        handLandmarkDetector.publish(.pinching(timestamp: 60.10))
+        handPresenceDetector.publishStableAbsent()
+
+        XCTAssertEqual(coordinator.appState.virtualCursorState, .hidden)
+        XCTAssertEqual(coordinator.appState.handDetectionState, .lost)
+    }
+
     func testHandLandmarkFailureExitsGestureModeAndHidesVirtualCursor() {
         let hotkeyManager = CoordinatorHotkeyManager()
         let cameraSessionManager = CoordinatorCameraSessionManager()
