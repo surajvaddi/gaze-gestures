@@ -94,6 +94,15 @@ final class PinchCursorTests: XCTestCase {
         XCTAssertEqual(configuration.requiredOpenObservations, 3)
     }
 
+    func testConservativePinchCursorMappingDefaultsAreExplicit() {
+        let configuration = PinchCursorMappingConfiguration.conservativeDefault
+
+        XCTAssertEqual(configuration.minimumConfidence, 0.65)
+        XCTAssertTrue(configuration.mirrorsHorizontally)
+        XCTAssertFalse(configuration.invertsVertically)
+        XCTAssertEqual(configuration.requiredState, .pinching)
+    }
+
     func testCustomPinchClassificationConfigurationEquality() {
         let configuration = PinchClassificationConfiguration(
             pinchingDistanceThreshold: 0.05,
@@ -312,6 +321,96 @@ final class PinchCursorTests: XCTestCase {
 
         XCTAssertEqual(result?.state, .pinching)
     }
+
+    func testPinchCursorMapperMapsStablePinchMidpointIntoScreenBounds() {
+        let mapper = PinchCursorMapper(configuration: directPinchCursorMappingConfiguration)
+        let bounds = ScreenBounds(
+            origin: ScreenPoint(x: 100, y: 200),
+            width: 100,
+            height: 40
+        )
+
+        let point = mapper.map(.pinching(timestamp: 80), in: bounds)
+
+        XCTAssertEqual(point, ScreenPoint(x: 142, y: 220))
+    }
+
+    func testPinchCursorMapperMirrorsAndInvertsCoordinatesWhenConfigured() {
+        let mapper = PinchCursorMapper(
+            configuration: PinchCursorMappingConfiguration(
+                minimumConfidence: 0.65,
+                mirrorsHorizontally: true,
+                invertsVertically: true,
+                requiredState: .pinching
+            )
+        )
+        let bounds = ScreenBounds(
+            origin: ScreenPoint(x: 0, y: 0),
+            width: 100,
+            height: 40
+        )
+
+        let point = mapper.map(.pinching(timestamp: 81), in: bounds)
+
+        XCTAssertEqual(point?.x ?? -1, 58, accuracy: 0.0001)
+        XCTAssertEqual(point?.y ?? -1, 20, accuracy: 0.0001)
+    }
+
+    func testPinchCursorMapperClampsNormalizedPointToScreenBounds() {
+        let mapper = PinchCursorMapper(configuration: directPinchCursorMappingConfiguration)
+        let bounds = ScreenBounds(
+            origin: ScreenPoint(x: 10, y: 20),
+            width: 100,
+            height: 30
+        )
+        let cursorPoint = PinchCursorPoint(
+            normalizedPoint: NormalizedPoint(x: 1.25, y: -0.50),
+            confidence: 0.90,
+            timestamp: 82
+        )
+
+        let point = mapper.map(cursorPoint, in: bounds)
+
+        XCTAssertEqual(point, ScreenPoint(x: 110, y: 20))
+    }
+
+    func testPinchCursorMapperRejectsOpenObservationByDefault() {
+        let mapper = PinchCursorMapper(configuration: directPinchCursorMappingConfiguration)
+
+        XCTAssertNil(mapper.map(.open(timestamp: 83), in: testScreenBounds))
+    }
+
+    func testPinchCursorMapperRejectsLowConfidenceObservation() {
+        let mapper = PinchCursorMapper(configuration: directPinchCursorMappingConfiguration)
+        let observation = PinchObservation(
+            state: .pinching,
+            thumbTip: nil,
+            indexTip: nil,
+            midpoint: NormalizedPoint(x: 0.50, y: 0.50),
+            normalizedDistance: 0.04,
+            confidence: 0.64,
+            timestamp: 84
+        )
+
+        XCTAssertNil(mapper.map(observation, in: testScreenBounds))
+    }
+
+    func testPinchCursorMapperRejectsMissingMidpoint() {
+        let mapper = PinchCursorMapper(configuration: directPinchCursorMappingConfiguration)
+
+        XCTAssertNil(mapper.map(.unknown(timestamp: 85), in: testScreenBounds))
+    }
+
+    func testPinchCursorMapperRejectsInvalidBounds() {
+        let mapper = PinchCursorMapper(configuration: directPinchCursorMappingConfiguration)
+        let bounds = ScreenBounds(
+            origin: ScreenPoint(x: 0, y: 0),
+            width: 0,
+            height: 30
+        )
+
+        XCTAssertNil(mapper.map(.pinching(timestamp: 86), in: bounds))
+    }
 }
 
 private let testPinchConfiguration = PinchClassificationConfiguration(
@@ -323,6 +422,19 @@ private let testPinchConfiguration = PinchClassificationConfiguration(
 private let testPinchStabilityConfiguration = PinchStabilityConfiguration(
     requiredPinchingObservations: 3,
     requiredOpenObservations: 3
+)
+
+private let directPinchCursorMappingConfiguration = PinchCursorMappingConfiguration(
+    minimumConfidence: 0.65,
+    mirrorsHorizontally: false,
+    invertsVertically: false,
+    requiredState: .pinching
+)
+
+private let testScreenBounds = ScreenBounds(
+    origin: ScreenPoint(x: 0, y: 0),
+    width: 100,
+    height: 30
 )
 
 private extension PinchObservation {

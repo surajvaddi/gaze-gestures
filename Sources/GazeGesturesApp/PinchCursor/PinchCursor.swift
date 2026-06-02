@@ -62,10 +62,39 @@ struct PinchStabilityConfiguration: Equatable {
     )
 }
 
+struct PinchCursorMappingConfiguration: Equatable {
+    var minimumConfidence: Double
+    var mirrorsHorizontally: Bool
+    var invertsVertically: Bool
+    var requiredState: PinchState?
+
+    static let conservativeDefault = PinchCursorMappingConfiguration(
+        minimumConfidence: PinchClassificationConfiguration.conservativeDefault.minimumLandmarkConfidence,
+        mirrorsHorizontally: true,
+        invertsVertically: false,
+        requiredState: .pinching
+    )
+}
+
 struct PinchCursorPoint: Equatable {
     var normalizedPoint: NormalizedPoint
     var confidence: Double
     var timestamp: TimeInterval
+}
+
+struct ScreenPoint: Equatable {
+    var x: Double
+    var y: Double
+}
+
+struct ScreenBounds: Equatable {
+    var origin: ScreenPoint
+    var width: Double
+    var height: Double
+
+    var isValid: Bool {
+        width > 0 && height > 0
+    }
 }
 
 struct PinchDistanceClassifier {
@@ -176,5 +205,58 @@ final class PinchStabilityController {
     func reset() {
         pinchingObservationCount = 0
         openObservationCount = 0
+    }
+}
+
+struct PinchCursorMapper {
+    var configuration: PinchCursorMappingConfiguration
+
+    init(configuration: PinchCursorMappingConfiguration = .conservativeDefault) {
+        self.configuration = configuration
+    }
+
+    func map(_ observation: PinchObservation, in bounds: ScreenBounds) -> ScreenPoint? {
+        guard bounds.isValid,
+              observation.confidence >= configuration.minimumConfidence,
+              let midpoint = observation.midpoint else {
+            return nil
+        }
+
+        if let requiredState = configuration.requiredState,
+           observation.state != requiredState {
+            return nil
+        }
+
+        return map(
+            PinchCursorPoint(
+                normalizedPoint: midpoint,
+                confidence: observation.confidence,
+                timestamp: observation.timestamp
+            ),
+            in: bounds
+        )
+    }
+
+    func map(_ point: PinchCursorPoint, in bounds: ScreenBounds) -> ScreenPoint? {
+        guard bounds.isValid,
+              point.confidence >= configuration.minimumConfidence else {
+            return nil
+        }
+
+        let normalizedPoint = clamped(point.normalizedPoint)
+        let mappedX = configuration.mirrorsHorizontally ? 1 - normalizedPoint.x : normalizedPoint.x
+        let mappedY = configuration.invertsVertically ? 1 - normalizedPoint.y : normalizedPoint.y
+
+        return ScreenPoint(
+            x: bounds.origin.x + mappedX * bounds.width,
+            y: bounds.origin.y + mappedY * bounds.height
+        )
+    }
+
+    private func clamped(_ point: NormalizedPoint) -> NormalizedPoint {
+        NormalizedPoint(
+            x: min(max(point.x, 0), 1),
+            y: min(max(point.y, 0), 1)
+        )
     }
 }
