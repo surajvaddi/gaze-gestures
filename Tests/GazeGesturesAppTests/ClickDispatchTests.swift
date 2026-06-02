@@ -2,6 +2,114 @@ import XCTest
 @testable import GazeGesturesApp
 
 final class ClickDispatchTests: XCTestCase {
+    func testConservativeSafeClickGateDefaultsAreExplicit() {
+        let configuration = SafeClickGateConfiguration.conservativeDefault
+
+        XCTAssertEqual(configuration.minimumConfidence, 0.70)
+    }
+
+    func testSafeClickGateAcceptsHandGestureReleaseWithVisibleCursorAndConfidence() {
+        let gate = SafeClickGate(configuration: SafeClickGateConfiguration(minimumConfidence: 0.80))
+
+        XCTAssertEqual(
+            gate.evaluate(
+                SafeClickGateRequest(
+                    mode: .handGesture,
+                    virtualCursorState: .visible(ScreenPoint(x: 100, y: 200)),
+                    confidence: 0.85,
+                    isReleaseIntent: true,
+                    allowsClick: true
+                )
+            ),
+            .accepted(ScreenPoint(x: 100, y: 200))
+        )
+    }
+
+    func testSafeClickGateRejectsIncorrectMode() {
+        let gate = SafeClickGate()
+
+        XCTAssertEqual(
+            gate.evaluate(
+                SafeClickGateRequest(
+                    mode: .armed,
+                    virtualCursorState: .visible(ScreenPoint(x: 100, y: 200)),
+                    confidence: 1,
+                    isReleaseIntent: true,
+                    allowsClick: true
+                )
+            ),
+            .rejected(.incorrectMode)
+        )
+    }
+
+    func testSafeClickGateRejectsMissingReleaseIntent() {
+        let gate = SafeClickGate()
+
+        XCTAssertEqual(
+            gate.evaluate(
+                SafeClickGateRequest(
+                    mode: .handGesture,
+                    virtualCursorState: .visible(ScreenPoint(x: 100, y: 200)),
+                    confidence: 1,
+                    isReleaseIntent: false,
+                    allowsClick: true
+                )
+            ),
+            .rejected(.missingReleaseIntent)
+        )
+    }
+
+    func testSafeClickGateRejectsHiddenCursor() {
+        let gate = SafeClickGate()
+
+        XCTAssertEqual(
+            gate.evaluate(
+                SafeClickGateRequest(
+                    mode: .handGesture,
+                    virtualCursorState: .hidden,
+                    confidence: 1,
+                    isReleaseIntent: true,
+                    allowsClick: true
+                )
+            ),
+            .rejected(.hiddenCursor)
+        )
+    }
+
+    func testSafeClickGateRejectsLowConfidence() {
+        let gate = SafeClickGate(configuration: SafeClickGateConfiguration(minimumConfidence: 0.80))
+
+        XCTAssertEqual(
+            gate.evaluate(
+                SafeClickGateRequest(
+                    mode: .handGesture,
+                    virtualCursorState: .visible(ScreenPoint(x: 100, y: 200)),
+                    confidence: 0.79,
+                    isReleaseIntent: true,
+                    allowsClick: true
+                )
+            ),
+            .rejected(.lowConfidence)
+        )
+    }
+
+    func testSafeClickGateRejectsActiveCooldown() {
+        let gate = SafeClickGate()
+
+        XCTAssertEqual(
+            gate.evaluate(
+                SafeClickGateRequest(
+                    mode: .handGesture,
+                    virtualCursorState: .visible(ScreenPoint(x: 100, y: 200)),
+                    confidence: 1,
+                    isReleaseIntent: true,
+                    allowsClick: false
+                )
+            ),
+            .rejected(.cooldownActive)
+        )
+    }
+
     func testRecordingClickDispatcherStoresLeftClickPoints() {
         let dispatcher = RecordingClickDispatcher()
 
