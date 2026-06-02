@@ -57,3 +57,73 @@ struct PinchCursorPoint: Equatable {
     var confidence: Double
     var timestamp: TimeInterval
 }
+
+struct PinchDistanceClassifier {
+    var configuration: PinchClassificationConfiguration
+
+    init(configuration: PinchClassificationConfiguration = .conservativeDefault) {
+        self.configuration = configuration
+    }
+
+    func classify(_ observation: HandLandmarkObservation) -> PinchObservation {
+        guard let thumbTip = observation.thumbTip,
+              let indexTip = observation.indexTip else {
+            return unknownObservation(from: observation)
+        }
+
+        guard thumbTip.confidence >= configuration.minimumLandmarkConfidence,
+              indexTip.confidence >= configuration.minimumLandmarkConfidence,
+              thumbTip.location.isWithinUnitBounds,
+              indexTip.location.isWithinUnitBounds else {
+            return unknownObservation(from: observation)
+        }
+
+        let distance = normalizedDistance(from: thumbTip.location, to: indexTip.location)
+        let confidence = min(thumbTip.confidence, indexTip.confidence)
+        let midpoint = NormalizedPoint(
+            x: (thumbTip.location.x + indexTip.location.x) / 2,
+            y: (thumbTip.location.y + indexTip.location.y) / 2
+        )
+
+        return PinchObservation(
+            state: state(forDistance: distance),
+            thumbTip: thumbTip,
+            indexTip: indexTip,
+            midpoint: midpoint,
+            normalizedDistance: distance,
+            confidence: confidence,
+            timestamp: observation.timestamp
+        )
+    }
+
+    private func state(forDistance distance: Double) -> PinchState {
+        if distance <= configuration.pinchingDistanceThreshold {
+            return .pinching
+        }
+
+        if distance >= configuration.openDistanceThreshold {
+            return .open
+        }
+
+        return .unknown
+    }
+
+    private func normalizedDistance(from lhs: NormalizedPoint, to rhs: NormalizedPoint) -> Double {
+        let deltaX = lhs.x - rhs.x
+        let deltaY = lhs.y - rhs.y
+
+        return (deltaX * deltaX + deltaY * deltaY).squareRoot()
+    }
+
+    private func unknownObservation(from observation: HandLandmarkObservation) -> PinchObservation {
+        PinchObservation(
+            state: .unknown,
+            thumbTip: observation.thumbTip,
+            indexTip: observation.indexTip,
+            midpoint: nil,
+            normalizedDistance: nil,
+            confidence: 0,
+            timestamp: observation.timestamp
+        )
+    }
+}

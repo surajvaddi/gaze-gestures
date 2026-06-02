@@ -128,4 +128,153 @@ final class PinchCursorTests: XCTestCase {
             )
         )
     }
+
+    func testPinchDistanceClassifierClassifiesCloseLandmarksAsPinching() {
+        let classifier = PinchDistanceClassifier(configuration: testPinchConfiguration)
+
+        let observation = classifier.classify(
+            landmarkObservation(
+                thumb: NormalizedPoint(x: 0.40, y: 0.50),
+                index: NormalizedPoint(x: 0.44, y: 0.50)
+            )
+        )
+
+        XCTAssertEqual(observation.state, .pinching)
+        XCTAssertEqual(observation.midpoint?.x ?? -1, 0.42, accuracy: 0.0001)
+        XCTAssertEqual(observation.midpoint?.y ?? -1, 0.50, accuracy: 0.0001)
+        XCTAssertEqual(observation.normalizedDistance ?? -1, 0.04, accuracy: 0.0001)
+        XCTAssertEqual(observation.confidence, 0.90)
+    }
+
+    func testPinchDistanceClassifierClassifiesFarLandmarksAsOpen() {
+        let classifier = PinchDistanceClassifier(configuration: testPinchConfiguration)
+
+        let observation = classifier.classify(
+            landmarkObservation(
+                thumb: NormalizedPoint(x: 0.30, y: 0.50),
+                index: NormalizedPoint(x: 0.45, y: 0.50)
+            )
+        )
+
+        XCTAssertEqual(observation.state, .open)
+        XCTAssertEqual(observation.midpoint, NormalizedPoint(x: 0.375, y: 0.50))
+        XCTAssertEqual(observation.normalizedDistance ?? -1, 0.15, accuracy: 0.0001)
+    }
+
+    func testPinchDistanceClassifierClassifiesThresholdGapAsUnknown() {
+        let classifier = PinchDistanceClassifier(configuration: testPinchConfiguration)
+
+        let observation = classifier.classify(
+            landmarkObservation(
+                thumb: NormalizedPoint(x: 0.40, y: 0.50),
+                index: NormalizedPoint(x: 0.47, y: 0.50)
+            )
+        )
+
+        XCTAssertEqual(observation.state, .unknown)
+        XCTAssertEqual(observation.normalizedDistance ?? -1, 0.07, accuracy: 0.0001)
+    }
+
+    func testPinchDistanceClassifierReturnsUnknownForMissingLandmarks() {
+        let classifier = PinchDistanceClassifier(configuration: testPinchConfiguration)
+
+        let observation = classifier.classify(
+            HandLandmarkObservation(
+                thumbTip: nil,
+                indexTip: HandLandmarkPoint(
+                    location: NormalizedPoint(x: 0.45, y: 0.50),
+                    confidence: 0.90
+                ),
+                timestamp: 4
+            )
+        )
+
+        XCTAssertEqual(observation.state, .unknown)
+        XCTAssertNil(observation.midpoint)
+        XCTAssertNil(observation.normalizedDistance)
+        XCTAssertEqual(observation.confidence, 0)
+    }
+
+    func testPinchDistanceClassifierReturnsUnknownForLowConfidenceLandmarks() {
+        let classifier = PinchDistanceClassifier(configuration: testPinchConfiguration)
+
+        let observation = classifier.classify(
+            HandLandmarkObservation(
+                thumbTip: HandLandmarkPoint(
+                    location: NormalizedPoint(x: 0.40, y: 0.50),
+                    confidence: 0.64
+                ),
+                indexTip: HandLandmarkPoint(
+                    location: NormalizedPoint(x: 0.44, y: 0.50),
+                    confidence: 0.90
+                ),
+                timestamp: 5
+            )
+        )
+
+        XCTAssertEqual(observation.state, .unknown)
+        XCTAssertNil(observation.midpoint)
+        XCTAssertNil(observation.normalizedDistance)
+    }
+
+    func testPinchDistanceClassifierReturnsUnknownForOutOfBoundsLandmarks() {
+        let classifier = PinchDistanceClassifier(configuration: testPinchConfiguration)
+
+        let observation = classifier.classify(
+            landmarkObservation(
+                thumb: NormalizedPoint(x: -0.01, y: 0.50),
+                index: NormalizedPoint(x: 0.04, y: 0.50)
+            )
+        )
+
+        XCTAssertEqual(observation.state, .unknown)
+        XCTAssertNil(observation.midpoint)
+        XCTAssertNil(observation.normalizedDistance)
+    }
+
+    func testPinchDistanceClassifierThresholdBoundaries() {
+        let classifier = PinchDistanceClassifier(configuration: testPinchConfiguration)
+
+        let pinching = classifier.classify(
+            landmarkObservation(
+                thumb: NormalizedPoint(x: 0.40, y: 0.50),
+                index: NormalizedPoint(x: 0.45, y: 0.50)
+            )
+        )
+        let open = classifier.classify(
+            landmarkObservation(
+                thumb: NormalizedPoint(x: 0.40, y: 0.50),
+                index: NormalizedPoint(x: 0.501, y: 0.50)
+            )
+        )
+
+        XCTAssertEqual(pinching.state, .pinching)
+        XCTAssertEqual(open.state, .open)
+    }
+}
+
+private let testPinchConfiguration = PinchClassificationConfiguration(
+    pinchingDistanceThreshold: 0.05,
+    openDistanceThreshold: 0.10,
+    minimumLandmarkConfidence: 0.65
+)
+
+private func landmarkObservation(
+    thumb: NormalizedPoint,
+    index: NormalizedPoint,
+    thumbConfidence: Double = 0.90,
+    indexConfidence: Double = 0.92,
+    timestamp: TimeInterval = 4
+) -> HandLandmarkObservation {
+    HandLandmarkObservation(
+        thumbTip: HandLandmarkPoint(
+            location: thumb,
+            confidence: thumbConfidence
+        ),
+        indexTip: HandLandmarkPoint(
+            location: index,
+            confidence: indexConfidence
+        ),
+        timestamp: timestamp
+    )
 }
