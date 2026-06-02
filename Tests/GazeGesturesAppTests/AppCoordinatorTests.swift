@@ -494,6 +494,137 @@ final class AppCoordinatorTests: XCTestCase {
         XCTAssertFalse(handPresenceDetector.isRunning)
         XCTAssertEqual(coordinator.appState.handDetectionState, .idle)
     }
+
+    func testStableHandPresenceStartsHandLandmarkDetection() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let handLandmarkDetector = CoordinatorHandLandmarkDetector()
+        let coordinator = AppCoordinator(
+            permissionProvider: CoordinatorPermissionProvider(
+                snapshot: PermissionSnapshot(camera: .granted, accessibility: .granted)
+            ),
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector,
+            handLandmarkDetector: handLandmarkDetector
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        handPresenceDetector.publishStablePresent()
+
+        XCTAssertEqual(coordinator.appState.mode, .handGesture)
+        XCTAssertEqual(handLandmarkDetector.startCallCount, 1)
+        XCTAssertTrue(handLandmarkDetector.isRunning)
+    }
+
+    func testCameraFramesForwardToHandLandmarkDetectorOnlyInHandGestureMode() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let handLandmarkDetector = CoordinatorHandLandmarkDetector()
+        let coordinator = AppCoordinator(
+            permissionProvider: CoordinatorPermissionProvider(
+                snapshot: PermissionSnapshot(camera: .granted, accessibility: .granted)
+            ),
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector,
+            handLandmarkDetector: handLandmarkDetector
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        cameraSessionManager.publishFrame(timestamp: 10)
+        handPresenceDetector.publishStablePresent()
+        cameraSessionManager.publishFrame(timestamp: 60)
+        cameraSessionManager.publishFrame(timestamp: 70)
+
+        XCTAssertEqual(handLandmarkDetector.processedFrameTimestamps, [60, 70])
+    }
+
+    func testStablePinchUpdatesVirtualCursorState() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let handLandmarkDetector = CoordinatorHandLandmarkDetector()
+        let coordinator = pinchCoordinator(
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector,
+            handLandmarkDetector: handLandmarkDetector
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        handPresenceDetector.publishStablePresent()
+        handLandmarkDetector.publish(.pinching(timestamp: 70))
+
+        guard case .visible(let point) = coordinator.appState.virtualCursorState else {
+            XCTFail("Expected visible virtual cursor")
+            return
+        }
+        XCTAssertEqual(point.x, 42, accuracy: 0.0001)
+        XCTAssertEqual(point.y, 20, accuracy: 0.0001)
+        XCTAssertEqual(coordinator.appState.lastEventDescription, "Pinch cursor active")
+    }
+
+    func testStableOpenHidesVirtualCursor() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let handLandmarkDetector = CoordinatorHandLandmarkDetector()
+        let coordinator = pinchCoordinator(
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector,
+            handLandmarkDetector: handLandmarkDetector
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        handPresenceDetector.publishStablePresent()
+        handLandmarkDetector.publish(.pinching(timestamp: 70))
+        handLandmarkDetector.publish(.open(timestamp: 61))
+
+        XCTAssertEqual(coordinator.appState.virtualCursorState, .hidden)
+        XCTAssertEqual(coordinator.appState.lastEventDescription, "Pinch released")
+    }
+
+    func testHandLandmarkFailureExitsGestureModeAndHidesVirtualCursor() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let handLandmarkDetector = CoordinatorHandLandmarkDetector()
+        let coordinator = pinchCoordinator(
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector,
+            handLandmarkDetector: handLandmarkDetector
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        handPresenceDetector.publishStablePresent()
+        handLandmarkDetector.publish(.pinching(timestamp: 70))
+        handLandmarkDetector.publishFailure("Vision request failed")
+
+        XCTAssertEqual(coordinator.appState.mode, .idle)
+        XCTAssertEqual(coordinator.appState.handDetectionState, .failed("Vision request failed"))
+        XCTAssertEqual(coordinator.appState.virtualCursorState, .hidden)
+        XCTAssertEqual(
+            coordinator.appState.lastEventDescription,
+            "Hand landmark detection failed: Vision request failed"
+        )
+        XCTAssertEqual(cameraSessionManager.stopCallCount, 1)
+        XCTAssertEqual(handLandmarkDetector.stopCallCount, 1)
+    }
 }
 
 private final class CoordinatorHotkeyManager: HotkeyManaging {
@@ -613,6 +744,88 @@ private final class CoordinatorHandPresenceDetector: HandPresenceDetecting {
     }
 }
 
+private final class CoordinatorHandLandmarkDetector: HandLandmarkDetecting {
+    var onObservation: ((HandLandmarkObservation) -> Void)?
+    var onFailure: ((String) -> Void)?
+    private(set) var startCallCount = 0
+    private(set) var stopCallCount = 0
+    private(set) var processedFrameTimestamps: [TimeInterval] = []
+    private(set) var isRunning = false
+
+    func startDetection() {
+        startCallCount += 1
+        isRunning = true
+    }
+
+    func stopDetection() {
+        stopCallCount += 1
+        isRunning = false
+    }
+
+    func process(_ frame: CameraFrame) {
+        guard isRunning else { return }
+
+        processedFrameTimestamps.append(frame.timestamp)
+    }
+
+    func publish(_ observation: HandLandmarkObservation) {
+        guard isRunning else { return }
+
+        onObservation?(observation)
+    }
+
+    func publishFailure(_ message: String) {
+        guard isRunning else { return }
+
+        onFailure?(message)
+    }
+}
+
+private struct CoordinatorScreenBoundsProvider: ScreenBoundsProviding {
+    func currentScreenBounds() -> ScreenBounds? {
+        ScreenBounds(
+            origin: ScreenPoint(x: 0, y: 0),
+            width: 100,
+            height: 40
+        )
+    }
+}
+
+private func pinchCoordinator(
+    hotkeyManager: CoordinatorHotkeyManager,
+    cameraSessionManager: CoordinatorCameraSessionManager,
+    handPresenceDetector: CoordinatorHandPresenceDetector,
+    handLandmarkDetector: CoordinatorHandLandmarkDetector
+) -> AppCoordinator {
+    AppCoordinator(
+        permissionProvider: CoordinatorPermissionProvider(
+            snapshot: PermissionSnapshot(camera: .granted, accessibility: .granted)
+        ),
+        hotkeyManager: hotkeyManager,
+        cameraSessionManager: cameraSessionManager,
+        handPresenceDetector: handPresenceDetector,
+        handLandmarkDetector: handLandmarkDetector,
+        pinchStabilityController: PinchStabilityController(
+            configuration: PinchStabilityConfiguration(
+                requiredPinchingObservations: 1,
+                requiredOpenObservations: 1
+            )
+        ),
+        pinchCursorMapper: PinchCursorMapper(
+            configuration: PinchCursorMappingConfiguration(
+                minimumConfidence: 0.65,
+                mirrorsHorizontally: false,
+                invertsVertically: false,
+                requiredState: .pinching
+            )
+        ),
+        pinchCursorSmoother: PinchCursorSmoother(
+            configuration: PinchCursorSmoothingConfiguration(interpolationFactor: 1)
+        ),
+        screenBoundsProvider: CoordinatorScreenBoundsProvider()
+    )
+}
+
 private extension HandPresenceObservation {
     static func present(confidence: Double, timestamp: TimeInterval) -> HandPresenceObservation {
         HandPresenceObservation(
@@ -626,6 +839,36 @@ private extension HandPresenceObservation {
         HandPresenceObservation(
             state: .absent,
             confidence: confidence,
+            timestamp: timestamp
+        )
+    }
+}
+
+private extension HandLandmarkObservation {
+    static func pinching(timestamp: TimeInterval) -> HandLandmarkObservation {
+        HandLandmarkObservation(
+            thumbTip: HandLandmarkPoint(
+                location: NormalizedPoint(x: 0.40, y: 0.50),
+                confidence: 0.90
+            ),
+            indexTip: HandLandmarkPoint(
+                location: NormalizedPoint(x: 0.44, y: 0.50),
+                confidence: 0.92
+            ),
+            timestamp: timestamp
+        )
+    }
+
+    static func open(timestamp: TimeInterval) -> HandLandmarkObservation {
+        HandLandmarkObservation(
+            thumbTip: HandLandmarkPoint(
+                location: NormalizedPoint(x: 0.30, y: 0.50),
+                confidence: 0.90
+            ),
+            indexTip: HandLandmarkPoint(
+                location: NormalizedPoint(x: 0.45, y: 0.50),
+                confidence: 0.92
+            ),
             timestamp: timestamp
         )
     }

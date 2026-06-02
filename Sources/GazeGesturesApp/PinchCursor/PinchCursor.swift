@@ -105,6 +105,10 @@ struct ScreenBounds: Equatable {
     }
 }
 
+protocol ScreenBoundsProviding {
+    func currentScreenBounds() -> ScreenBounds?
+}
+
 struct PinchDistanceClassifier {
     var configuration: PinchClassificationConfiguration
 

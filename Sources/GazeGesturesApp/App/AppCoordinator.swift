@@ -8,8 +8,15 @@ final class AppCoordinator {
     private let cameraSessionManager: CameraSessionManaging
     private let handPresenceDetector: HandPresenceDetecting
     private let handPresenceSessionController: HandPresenceSessionController
+    private let handLandmarkDetector: HandLandmarkDetecting
+    private let pinchDistanceClassifier: PinchDistanceClassifier
+    private let pinchStabilityController: PinchStabilityController
+    private let pinchCursorMapper: PinchCursorMapper
+    private let pinchCursorSmoother: PinchCursorSmoother
+    private let screenBoundsProvider: ScreenBoundsProviding
     private let modeController: ModeController
     private var isHandDetectionRunning = false
+    private var isHandLandmarkDetectionRunning = false
 
     init(
         appState: AppState = AppState(),
@@ -17,7 +24,13 @@ final class AppCoordinator {
         hotkeyManager: HotkeyManaging,
         cameraSessionManager: CameraSessionManaging,
         handPresenceDetector: HandPresenceDetecting = VisionHandPresenceDetector(),
-        handPresenceSessionController: HandPresenceSessionController = HandPresenceSessionController()
+        handPresenceSessionController: HandPresenceSessionController = HandPresenceSessionController(),
+        handLandmarkDetector: HandLandmarkDetecting = VisionHandLandmarkDetector(),
+        pinchDistanceClassifier: PinchDistanceClassifier = PinchDistanceClassifier(),
+        pinchStabilityController: PinchStabilityController = PinchStabilityController(),
+        pinchCursorMapper: PinchCursorMapper = PinchCursorMapper(),
+        pinchCursorSmoother: PinchCursorSmoother = PinchCursorSmoother(),
+        screenBoundsProvider: ScreenBoundsProviding = AppKitScreenBoundsProvider()
     ) {
         self.appState = appState
         self.permissionProvider = permissionProvider
@@ -25,6 +38,12 @@ final class AppCoordinator {
         self.cameraSessionManager = cameraSessionManager
         self.handPresenceDetector = handPresenceDetector
         self.handPresenceSessionController = handPresenceSessionController
+        self.handLandmarkDetector = handLandmarkDetector
+        self.pinchDistanceClassifier = pinchDistanceClassifier
+        self.pinchStabilityController = pinchStabilityController
+        self.pinchCursorMapper = pinchCursorMapper
+        self.pinchCursorSmoother = pinchCursorSmoother
+        self.screenBoundsProvider = screenBoundsProvider
         self.modeController = ModeController(
             appState: appState,
             permissionProvider: permissionProvider
@@ -46,6 +65,14 @@ final class AppCoordinator {
             self?.handleHandPresenceObservation(observation)
         }
 
+        handLandmarkDetector.onObservation = { [weak self] observation in
+            self?.handleHandLandmarkObservation(observation)
+        }
+
+        handLandmarkDetector.onFailure = { [weak self] message in
+            self?.handleHandLandmarkFailure(message)
+        }
+
         hotkeyManager.onHotkey = { [weak self] hotkey in
             self?.handleHotkey(hotkey)
         }
@@ -59,6 +86,7 @@ final class AppCoordinator {
     }
 
     func stop() {
+        stopHandLandmarkDetection()
         stopHandDetection()
         appState.handDetectionState = .idle
         cameraSessionManager.stopSession()
@@ -101,6 +129,7 @@ final class AppCoordinator {
                 cameraSessionManager.startSession()
             }
         case .emergencyExit:
+            stopHandLandmarkDetection()
             stopHandDetection()
             appState.handDetectionState = .idle
             cameraSessionManager.stopSession()
@@ -115,11 +144,13 @@ final class AppCoordinator {
         case .running where appState.mode == .armed:
             startHandDetection()
         case .failed(let message):
+            stopHandLandmarkDetection()
             stopHandDetection()
             modeController.emergencyExit()
             appState.handDetectionState = .idle
             appState.lastEventDescription = "Camera failed: \(message)"
         case .idle, .stopping:
+            stopHandLandmarkDetection()
             stopHandDetection()
             appState.handDetectionState = .idle
         case .starting, .running:
@@ -128,9 +159,13 @@ final class AppCoordinator {
     }
 
     private func handleCameraFrame(_ frame: CameraFrame) {
-        guard isHandDetectionRunning else { return }
+        if isHandDetectionRunning {
+            handPresenceDetector.process(frame)
+        }
 
-        handPresenceDetector.process(frame)
+        if isHandLandmarkDetectionRunning {
+            handLandmarkDetector.process(frame)
+        }
     }
 
     private func handleHandPresenceObservation(_ observation: HandPresenceObservation) {
@@ -144,13 +179,16 @@ final class AppCoordinator {
             appState.mode = .handGesture
             appState.handDetectionState = .detected
             appState.lastEventDescription = "Hand detected"
+            startHandLandmarkDetection()
         case .absent where appState.mode == .handGesture:
+            stopHandLandmarkDetection()
             stopHandDetection()
             cameraSessionManager.stopSession()
             appState.mode = .idle
             appState.handDetectionState = .lost
             appState.lastEventDescription = "Hand lost"
         case .failed(let message):
+            stopHandLandmarkDetection()
             stopHandDetection()
             cameraSessionManager.stopSession()
             appState.mode = .idle
@@ -161,12 +199,51 @@ final class AppCoordinator {
         }
     }
 
+    private func handleHandLandmarkObservation(_ observation: HandLandmarkObservation) {
+        guard isHandLandmarkDetectionRunning,
+              appState.mode == .handGesture,
+              let stableObservation = pinchStabilityController.process(
+                pinchDistanceClassifier.classify(observation)
+              ) else {
+            return
+        }
+
+        switch stableObservation.state {
+        case .pinching:
+            guard let bounds = screenBoundsProvider.currentScreenBounds(),
+                  let mappedPoint = pinchCursorMapper.map(stableObservation, in: bounds) else {
+                hidePinchCursor()
+                return
+            }
+
+            appState.virtualCursorState = .visible(
+                pinchCursorSmoother.smooth(mappedPoint)
+            )
+            appState.lastEventDescription = "Pinch cursor active"
+        case .open:
+            hidePinchCursor()
+            appState.lastEventDescription = "Pinch released"
+        case .unknown:
+            break
+        }
+    }
+
+    private func handleHandLandmarkFailure(_ message: String) {
+        stopHandLandmarkDetection()
+        stopHandDetection()
+        cameraSessionManager.stopSession()
+        appState.mode = .idle
+        appState.handDetectionState = .failed(message)
+        appState.lastEventDescription = "Hand landmark detection failed: \(message)"
+    }
+
     private func handleRequiredPermissionLoss() {
         guard appState.mode.requiresActivePermissions,
               !appState.permissions.canEnterGestureMode else {
             return
         }
 
+        stopHandLandmarkDetection()
         stopHandDetection()
         appState.handDetectionState = .idle
         cameraSessionManager.stopSession()
@@ -188,5 +265,32 @@ final class AppCoordinator {
         isHandDetectionRunning = false
         handPresenceSessionController.reset()
         handPresenceDetector.stopDetection()
+    }
+
+    private func startHandLandmarkDetection() {
+        guard !isHandLandmarkDetectionRunning else { return }
+
+        isHandLandmarkDetectionRunning = true
+        pinchStabilityController.reset()
+        pinchCursorSmoother.reset()
+        handLandmarkDetector.startDetection()
+    }
+
+    private func stopHandLandmarkDetection() {
+        guard isHandLandmarkDetectionRunning else {
+            hidePinchCursor()
+            return
+        }
+
+        isHandLandmarkDetectionRunning = false
+        pinchStabilityController.reset()
+        pinchCursorSmoother.reset()
+        handLandmarkDetector.stopDetection()
+        hidePinchCursor()
+    }
+
+    private func hidePinchCursor() {
+        pinchCursorSmoother.reset()
+        appState.virtualCursorState = .hidden
     }
 }
