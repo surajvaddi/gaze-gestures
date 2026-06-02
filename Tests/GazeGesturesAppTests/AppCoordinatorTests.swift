@@ -596,6 +596,60 @@ final class AppCoordinatorTests: XCTestCase {
         handLandmarkDetector.publish(.open(timestamp: 71.10))
 
         XCTAssertEqual(coordinator.appState.virtualCursorState, .hidden)
+        XCTAssertEqual(coordinator.appState.lastEventDescription, "Pinch click dispatched")
+    }
+
+    func testPinchReleaseDispatchesLeftClickAtVisibleCursorPoint() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let handLandmarkDetector = CoordinatorHandLandmarkDetector()
+        let clickDispatcher = CoordinatorClickDispatcher()
+        let coordinator = pinchCoordinator(
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector,
+            handLandmarkDetector: handLandmarkDetector,
+            clickDispatcher: clickDispatcher
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        handPresenceDetector.publishStablePresent()
+        handLandmarkDetector.publish(.pinching(timestamp: 70))
+        handLandmarkDetector.publish(.pinching(timestamp: 70.10))
+        handLandmarkDetector.publish(.open(timestamp: 71))
+        handLandmarkDetector.publish(.open(timestamp: 71.10))
+
+        XCTAssertEqual(clickDispatcher.leftClickPoints.count, 1)
+        XCTAssertEqual(clickDispatcher.leftClickPoints[0].x, 42, accuracy: 0.0001)
+        XCTAssertEqual(clickDispatcher.leftClickPoints[0].y, 20, accuracy: 0.0001)
+        XCTAssertEqual(coordinator.appState.lastEventDescription, "Pinch click dispatched")
+    }
+
+    func testOpenWithoutPriorPinchDoesNotDispatchLeftClick() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let handLandmarkDetector = CoordinatorHandLandmarkDetector()
+        let clickDispatcher = CoordinatorClickDispatcher()
+        let coordinator = pinchCoordinator(
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector,
+            handLandmarkDetector: handLandmarkDetector,
+            clickDispatcher: clickDispatcher
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        handPresenceDetector.publishStablePresent()
+        handLandmarkDetector.publish(.open(timestamp: 71))
+        handLandmarkDetector.publish(.open(timestamp: 71.10))
+
+        XCTAssertEqual(clickDispatcher.leftClickPoints, [])
         XCTAssertEqual(coordinator.appState.lastEventDescription, "Pinch released")
     }
 
@@ -646,7 +700,7 @@ final class AppCoordinatorTests: XCTestCase {
         handLandmarkDetector.publish(.pinching(timestamp: 60.36))
 
         XCTAssertEqual(coordinator.appState.virtualCursorState, .hidden)
-        XCTAssertEqual(coordinator.appState.lastEventDescription, "Pinch released")
+        XCTAssertEqual(coordinator.appState.lastEventDescription, "Pinch click dispatched")
     }
 
     func testEmergencyExitClearsPinchCooldownAndCursorState() {
@@ -1001,11 +1055,26 @@ private struct CoordinatorScreenBoundsProvider: ScreenBoundsProviding {
     }
 }
 
+private final class CoordinatorClickDispatcher: ClickDispatching {
+    private(set) var leftClickPoints: [ScreenPoint] = []
+    var result: Result<Void, ClickDispatchError> = .success(())
+
+    func dispatchLeftClick(at point: ScreenPoint) -> Result<Void, ClickDispatchError> {
+        guard case .success = result else {
+            return result
+        }
+
+        leftClickPoints.append(point)
+        return result
+    }
+}
+
 private func pinchCoordinator(
     hotkeyManager: CoordinatorHotkeyManager,
     cameraSessionManager: CoordinatorCameraSessionManager,
     handPresenceDetector: CoordinatorHandPresenceDetector,
-    handLandmarkDetector: CoordinatorHandLandmarkDetector
+    handLandmarkDetector: CoordinatorHandLandmarkDetector,
+    clickDispatcher: ClickDispatching = CoordinatorClickDispatcher()
 ) -> AppCoordinator {
     AppCoordinator(
         permissionProvider: CoordinatorPermissionProvider(
@@ -1045,6 +1114,7 @@ private func pinchCoordinator(
         pinchCursorSmoother: PinchCursorSmoother(
             configuration: PinchCursorSmoothingConfiguration(interpolationFactor: 1)
         ),
+        clickDispatcher: clickDispatcher,
         screenBoundsProvider: CoordinatorScreenBoundsProvider()
     )
 }
