@@ -103,6 +103,12 @@ final class PinchCursorTests: XCTestCase {
         XCTAssertEqual(configuration.requiredState, .pinching)
     }
 
+    func testConservativePinchCursorSmoothingDefaultsAreExplicit() {
+        let configuration = PinchCursorSmoothingConfiguration.conservativeDefault
+
+        XCTAssertEqual(configuration.interpolationFactor, 0.35)
+    }
+
     func testCustomPinchClassificationConfigurationEquality() {
         let configuration = PinchClassificationConfiguration(
             pinchingDistanceThreshold: 0.05,
@@ -411,6 +417,57 @@ final class PinchCursorTests: XCTestCase {
 
         XCTAssertNil(mapper.map(.pinching(timestamp: 86), in: bounds))
     }
+
+    func testPinchCursorSmootherReturnsFirstPointImmediately() {
+        let smoother = PinchCursorSmoother(configuration: testSmoothingConfiguration)
+        let point = ScreenPoint(x: 20, y: 30)
+
+        XCTAssertEqual(smoother.smooth(point), point)
+    }
+
+    func testPinchCursorSmootherInterpolatesTowardNextPoint() {
+        let smoother = PinchCursorSmoother(configuration: testSmoothingConfiguration)
+
+        _ = smoother.smooth(ScreenPoint(x: 0, y: 10))
+        let point = smoother.smooth(ScreenPoint(x: 100, y: 50))
+
+        XCTAssertEqual(point, ScreenPoint(x: 25, y: 20))
+    }
+
+    func testPinchCursorSmootherUsesPreviousSmoothedPointForNextFrame() {
+        let smoother = PinchCursorSmoother(configuration: testSmoothingConfiguration)
+
+        _ = smoother.smooth(ScreenPoint(x: 0, y: 0))
+        _ = smoother.smooth(ScreenPoint(x: 100, y: 0))
+        let point = smoother.smooth(ScreenPoint(x: 100, y: 0))
+
+        XCTAssertEqual(point, ScreenPoint(x: 43.75, y: 0))
+    }
+
+    func testPinchCursorSmootherResetClearsHistory() {
+        let smoother = PinchCursorSmoother(configuration: testSmoothingConfiguration)
+
+        _ = smoother.smooth(ScreenPoint(x: 0, y: 0))
+        _ = smoother.smooth(ScreenPoint(x: 100, y: 100))
+        smoother.reset()
+
+        XCTAssertEqual(smoother.smooth(ScreenPoint(x: 10, y: 20)), ScreenPoint(x: 10, y: 20))
+    }
+
+    func testPinchCursorSmootherClampsInterpolationFactor() {
+        let fastSmoother = PinchCursorSmoother(
+            configuration: PinchCursorSmoothingConfiguration(interpolationFactor: 2)
+        )
+        let lockedSmoother = PinchCursorSmoother(
+            configuration: PinchCursorSmoothingConfiguration(interpolationFactor: -1)
+        )
+
+        _ = fastSmoother.smooth(ScreenPoint(x: 0, y: 0))
+        _ = lockedSmoother.smooth(ScreenPoint(x: 0, y: 0))
+
+        XCTAssertEqual(fastSmoother.smooth(ScreenPoint(x: 50, y: 60)), ScreenPoint(x: 50, y: 60))
+        XCTAssertEqual(lockedSmoother.smooth(ScreenPoint(x: 50, y: 60)), ScreenPoint(x: 0, y: 0))
+    }
 }
 
 private let testPinchConfiguration = PinchClassificationConfiguration(
@@ -435,6 +492,10 @@ private let testScreenBounds = ScreenBounds(
     origin: ScreenPoint(x: 0, y: 0),
     width: 100,
     height: 30
+)
+
+private let testSmoothingConfiguration = PinchCursorSmoothingConfiguration(
+    interpolationFactor: 0.25
 )
 
 private extension PinchObservation {

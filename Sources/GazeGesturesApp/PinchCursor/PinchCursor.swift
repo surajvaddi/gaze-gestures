@@ -76,6 +76,14 @@ struct PinchCursorMappingConfiguration: Equatable {
     )
 }
 
+struct PinchCursorSmoothingConfiguration: Equatable {
+    var interpolationFactor: Double
+
+    static let conservativeDefault = PinchCursorSmoothingConfiguration(
+        interpolationFactor: 0.35
+    )
+}
+
 struct PinchCursorPoint: Equatable {
     var normalizedPoint: NormalizedPoint
     var confidence: Double
@@ -258,5 +266,38 @@ struct PinchCursorMapper {
             x: min(max(point.x, 0), 1),
             y: min(max(point.y, 0), 1)
         )
+    }
+}
+
+final class PinchCursorSmoother {
+    private let configuration: PinchCursorSmoothingConfiguration
+    private var lastPoint: ScreenPoint?
+
+    init(configuration: PinchCursorSmoothingConfiguration = .conservativeDefault) {
+        self.configuration = configuration
+    }
+
+    func smooth(_ point: ScreenPoint) -> ScreenPoint {
+        guard let lastPoint else {
+            self.lastPoint = point
+            return point
+        }
+
+        let factor = clampedInterpolationFactor
+        let smoothedPoint = ScreenPoint(
+            x: lastPoint.x + (point.x - lastPoint.x) * factor,
+            y: lastPoint.y + (point.y - lastPoint.y) * factor
+        )
+
+        self.lastPoint = smoothedPoint
+        return smoothedPoint
+    }
+
+    func reset() {
+        lastPoint = nil
+    }
+
+    private var clampedInterpolationFactor: Double {
+        min(max(configuration.interpolationFactor, 0), 1)
     }
 }
