@@ -563,6 +563,7 @@ final class AppCoordinatorTests: XCTestCase {
         cameraSessionManager.publish(.running)
         handPresenceDetector.publishStablePresent()
         handLandmarkDetector.publish(.pinching(timestamp: 70))
+        handLandmarkDetector.publish(.pinching(timestamp: 70.10))
 
         guard case .visible(let point) = coordinator.appState.virtualCursorState else {
             XCTFail("Expected visible virtual cursor")
@@ -590,7 +591,59 @@ final class AppCoordinatorTests: XCTestCase {
         cameraSessionManager.publish(.running)
         handPresenceDetector.publishStablePresent()
         handLandmarkDetector.publish(.pinching(timestamp: 70))
-        handLandmarkDetector.publish(.open(timestamp: 61))
+        handLandmarkDetector.publish(.pinching(timestamp: 70.10))
+        handLandmarkDetector.publish(.open(timestamp: 71))
+        handLandmarkDetector.publish(.open(timestamp: 71.10))
+
+        XCTAssertEqual(coordinator.appState.virtualCursorState, .hidden)
+        XCTAssertEqual(coordinator.appState.lastEventDescription, "Pinch released")
+    }
+
+    func testRejectedTemporalPinchWindowDoesNotUpdateVirtualCursor() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let handLandmarkDetector = CoordinatorHandLandmarkDetector()
+        let coordinator = pinchCoordinator(
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector,
+            handLandmarkDetector: handLandmarkDetector
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        handPresenceDetector.publishStablePresent()
+        handLandmarkDetector.publish(.pinching(timestamp: 72))
+        handLandmarkDetector.publish(.open(timestamp: 60.10))
+
+        XCTAssertEqual(coordinator.appState.virtualCursorState, .hidden)
+        XCTAssertEqual(coordinator.appState.lastEventDescription, "Hand detected")
+    }
+
+    func testCooldownBlocksImmediatePinchReactivation() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let handLandmarkDetector = CoordinatorHandLandmarkDetector()
+        let coordinator = pinchCoordinator(
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector,
+            handLandmarkDetector: handLandmarkDetector
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        handPresenceDetector.publishStablePresent()
+        handLandmarkDetector.publish(.pinching(timestamp: 70))
+        handLandmarkDetector.publish(.pinching(timestamp: 60.10))
+        handLandmarkDetector.publish(.open(timestamp: 60.20))
+        handLandmarkDetector.publish(.open(timestamp: 60.30))
+        handLandmarkDetector.publish(.pinching(timestamp: 60.35))
+        handLandmarkDetector.publish(.pinching(timestamp: 60.36))
 
         XCTAssertEqual(coordinator.appState.virtualCursorState, .hidden)
         XCTAssertEqual(coordinator.appState.lastEventDescription, "Pinch released")
@@ -613,6 +666,7 @@ final class AppCoordinatorTests: XCTestCase {
         cameraSessionManager.publish(.running)
         handPresenceDetector.publishStablePresent()
         handLandmarkDetector.publish(.pinching(timestamp: 70))
+        handLandmarkDetector.publish(.pinching(timestamp: 70.10))
         handLandmarkDetector.publishFailure("Vision request failed")
 
         XCTAssertEqual(coordinator.appState.mode, .idle)
@@ -805,6 +859,19 @@ private func pinchCoordinator(
         cameraSessionManager: cameraSessionManager,
         handPresenceDetector: handPresenceDetector,
         handLandmarkDetector: handLandmarkDetector,
+        pinchObservationBuffer: PinchObservationBuffer(
+            configuration: PinchObservationBufferConfiguration(capacity: 2)
+        ),
+        temporalPinchClassifier: TemporalPinchClassifier(
+            configuration: TemporalPinchClassifierConfiguration(
+                requiredPinchingObservations: 2,
+                requiredOpenObservations: 2,
+                minimumAverageConfidence: 0.70
+            )
+        ),
+        pinchCooldownController: PinchCooldownController(
+            configuration: PinchCooldownConfiguration(duration: 0.50)
+        ),
         pinchStabilityController: PinchStabilityController(
             configuration: PinchStabilityConfiguration(
                 requiredPinchingObservations: 1,

@@ -10,6 +10,9 @@ final class AppCoordinator {
     private let handPresenceSessionController: HandPresenceSessionController
     private let handLandmarkDetector: HandLandmarkDetecting
     private let pinchDistanceClassifier: PinchDistanceClassifier
+    private let pinchObservationBuffer: PinchObservationBuffer
+    private let temporalPinchClassifier: TemporalPinchClassifier
+    private let pinchCooldownController: PinchCooldownController
     private let pinchStabilityController: PinchStabilityController
     private let pinchCursorMapper: PinchCursorMapper
     private let pinchCursorSmoother: PinchCursorSmoother
@@ -27,6 +30,9 @@ final class AppCoordinator {
         handPresenceSessionController: HandPresenceSessionController = HandPresenceSessionController(),
         handLandmarkDetector: HandLandmarkDetecting = VisionHandLandmarkDetector(),
         pinchDistanceClassifier: PinchDistanceClassifier = PinchDistanceClassifier(),
+        pinchObservationBuffer: PinchObservationBuffer = PinchObservationBuffer(),
+        temporalPinchClassifier: TemporalPinchClassifier = TemporalPinchClassifier(),
+        pinchCooldownController: PinchCooldownController = PinchCooldownController(),
         pinchStabilityController: PinchStabilityController = PinchStabilityController(),
         pinchCursorMapper: PinchCursorMapper = PinchCursorMapper(),
         pinchCursorSmoother: PinchCursorSmoother = PinchCursorSmoother(),
@@ -40,6 +46,9 @@ final class AppCoordinator {
         self.handPresenceSessionController = handPresenceSessionController
         self.handLandmarkDetector = handLandmarkDetector
         self.pinchDistanceClassifier = pinchDistanceClassifier
+        self.pinchObservationBuffer = pinchObservationBuffer
+        self.temporalPinchClassifier = temporalPinchClassifier
+        self.pinchCooldownController = pinchCooldownController
         self.pinchStabilityController = pinchStabilityController
         self.pinchCursorMapper = pinchCursorMapper
         self.pinchCursorSmoother = pinchCursorSmoother
@@ -201,15 +210,28 @@ final class AppCoordinator {
 
     private func handleHandLandmarkObservation(_ observation: HandLandmarkObservation) {
         guard isHandLandmarkDetectionRunning,
-              appState.mode == .handGesture,
-              let stableObservation = pinchStabilityController.process(
-                pinchDistanceClassifier.classify(observation)
-              ) else {
+              appState.mode == .handGesture else {
             return
         }
 
+        pinchObservationBuffer.append(pinchDistanceClassifier.classify(observation))
+
+        switch temporalPinchClassifier.evaluate(pinchObservationBuffer.allObservations()) {
+        case .accepted(let stableObservation):
+            handleAcceptedPinchObservation(stableObservation)
+        case .rejected:
+            break
+        }
+    }
+
+    private func handleAcceptedPinchObservation(_ stableObservation: PinchObservation) {
         switch stableObservation.state {
         case .pinching:
+            guard pinchCooldownController.allowsActivation(at: stableObservation.timestamp) else {
+                hidePinchCursor()
+                return
+            }
+
             guard let bounds = screenBoundsProvider.currentScreenBounds(),
                   let mappedPoint = pinchCursorMapper.map(stableObservation, in: bounds) else {
                 hidePinchCursor()
@@ -221,6 +243,8 @@ final class AppCoordinator {
             )
             appState.lastEventDescription = "Pinch cursor active"
         case .open:
+            pinchCooldownController.registerRelease(at: stableObservation.timestamp)
+            pinchObservationBuffer.reset()
             hidePinchCursor()
             appState.lastEventDescription = "Pinch released"
         case .unknown:
