@@ -92,6 +92,18 @@ struct PinchObservationBufferConfiguration: Equatable {
     )
 }
 
+struct TemporalPinchClassifierConfiguration: Equatable {
+    var requiredPinchingObservations: Int
+    var requiredOpenObservations: Int
+    var minimumAverageConfidence: Double
+
+    static let conservativeDefault = TemporalPinchClassifierConfiguration(
+        requiredPinchingObservations: 4,
+        requiredOpenObservations: 3,
+        minimumAverageConfidence: 0.70
+    )
+}
+
 struct PinchCursorPoint: Equatable {
     var normalizedPoint: NormalizedPoint
     var confidence: Double
@@ -347,5 +359,66 @@ final class PinchObservationBuffer {
         }
 
         observations.removeFirst(observations.count - capacity)
+    }
+}
+
+struct TemporalPinchClassifier {
+    var configuration: TemporalPinchClassifierConfiguration
+
+    init(configuration: TemporalPinchClassifierConfiguration = .conservativeDefault) {
+        self.configuration = configuration
+    }
+
+    func classify(_ observations: [PinchObservation]) -> PinchObservation? {
+        guard !observations.isEmpty else {
+            return nil
+        }
+
+        guard !observations.contains(where: { $0.state == .unknown }) else {
+            return nil
+        }
+
+        if let pinching = stableObservation(
+            in: observations,
+            state: .pinching,
+            requiredCount: configuration.requiredPinchingObservations
+        ) {
+            return pinching
+        }
+
+        return stableObservation(
+            in: observations,
+            state: .open,
+            requiredCount: configuration.requiredOpenObservations
+        )
+    }
+
+    private func stableObservation(
+        in observations: [PinchObservation],
+        state: PinchState,
+        requiredCount: Int
+    ) -> PinchObservation? {
+        let matching = observations.filter { $0.state == state }
+
+        guard requiredCount > 0,
+              matching.count >= requiredCount,
+              matching.count == observations.count,
+              averageConfidence(in: matching) >= configuration.minimumAverageConfidence else {
+            return nil
+        }
+
+        return matching.last
+    }
+
+    private func averageConfidence(in observations: [PinchObservation]) -> Double {
+        guard !observations.isEmpty else {
+            return 0
+        }
+
+        let total = observations.reduce(0) { partialResult, observation in
+            partialResult + observation.confidence
+        }
+
+        return total / Double(observations.count)
     }
 }

@@ -115,6 +115,14 @@ final class PinchCursorTests: XCTestCase {
         XCTAssertEqual(configuration.capacity, 6)
     }
 
+    func testConservativeTemporalPinchClassifierDefaultsAreExplicit() {
+        let configuration = TemporalPinchClassifierConfiguration.conservativeDefault
+
+        XCTAssertEqual(configuration.requiredPinchingObservations, 4)
+        XCTAssertEqual(configuration.requiredOpenObservations, 3)
+        XCTAssertEqual(configuration.minimumAverageConfidence, 0.70)
+    }
+
     func testCustomPinchClassificationConfigurationEquality() {
         let configuration = PinchClassificationConfiguration(
             pinchingDistanceThreshold: 0.05,
@@ -535,6 +543,79 @@ final class PinchCursorTests: XCTestCase {
 
         XCTAssertTrue(buffer.allObservations().isEmpty)
     }
+
+    func testTemporalPinchClassifierAcceptsStablePinchWindow() {
+        let classifier = TemporalPinchClassifier(configuration: testTemporalClassifierConfiguration)
+
+        let observation = classifier.classify([
+            .pinching(timestamp: 1),
+            .pinching(timestamp: 61),
+            .pinching(timestamp: 70)
+        ])
+
+        XCTAssertEqual(observation?.state, .pinching)
+        XCTAssertEqual(observation?.timestamp, 70)
+    }
+
+    func testTemporalPinchClassifierAcceptsStableOpenWindow() {
+        let classifier = TemporalPinchClassifier(configuration: testTemporalClassifierConfiguration)
+
+        let observation = classifier.classify([
+            .open(timestamp: 70),
+            .open(timestamp: 61)
+        ])
+
+        XCTAssertEqual(observation?.state, .open)
+        XCTAssertEqual(observation?.timestamp, 61)
+    }
+
+    func testTemporalPinchClassifierRejectsNoisyMixedWindow() {
+        let classifier = TemporalPinchClassifier(configuration: testTemporalClassifierConfiguration)
+
+        let observation = classifier.classify([
+            .pinching(timestamp: 70),
+            .open(timestamp: 61),
+            .pinching(timestamp: 62)
+        ])
+
+        XCTAssertNil(observation)
+    }
+
+    func testTemporalPinchClassifierRejectsUnknownWindow() {
+        let classifier = TemporalPinchClassifier(configuration: testTemporalClassifierConfiguration)
+
+        let observation = classifier.classify([
+            .pinching(timestamp: 70),
+            .unknown(timestamp: 61),
+            .pinching(timestamp: 62)
+        ])
+
+        XCTAssertNil(observation)
+    }
+
+    func testTemporalPinchClassifierRejectsLowAverageConfidence() {
+        let classifier = TemporalPinchClassifier(configuration: testTemporalClassifierConfiguration)
+
+        let observation = classifier.classify([
+            .pinching(timestamp: 70, confidence: 0.60),
+            .pinching(timestamp: 61, confidence: 0.65),
+            .pinching(timestamp: 62, confidence: 0.70)
+        ])
+
+        XCTAssertNil(observation)
+    }
+
+    func testTemporalPinchClassifierRejectsInsufficientObservations() {
+        let classifier = TemporalPinchClassifier(configuration: testTemporalClassifierConfiguration)
+
+        XCTAssertNil(
+            classifier.classify([
+                .pinching(timestamp: 70),
+                .pinching(timestamp: 60)
+            ])
+        )
+        XCTAssertNil(classifier.classify([]))
+    }
 }
 
 private let testPinchConfiguration = PinchClassificationConfiguration(
@@ -565,27 +646,39 @@ private let testSmoothingConfiguration = PinchCursorSmoothingConfiguration(
     interpolationFactor: 0.25
 )
 
+private let testTemporalClassifierConfiguration = TemporalPinchClassifierConfiguration(
+    requiredPinchingObservations: 3,
+    requiredOpenObservations: 2,
+    minimumAverageConfidence: 0.70
+)
+
 private extension PinchObservation {
-    static func pinching(timestamp: TimeInterval) -> PinchObservation {
+    static func pinching(
+        timestamp: TimeInterval,
+        confidence: Double = 0.90
+    ) -> PinchObservation {
         PinchObservation(
             state: .pinching,
             thumbTip: nil,
             indexTip: nil,
             midpoint: NormalizedPoint(x: 0.42, y: 0.50),
             normalizedDistance: 0.04,
-            confidence: 0.90,
+            confidence: confidence,
             timestamp: timestamp
         )
     }
 
-    static func open(timestamp: TimeInterval) -> PinchObservation {
+    static func open(
+        timestamp: TimeInterval,
+        confidence: Double = 0.90
+    ) -> PinchObservation {
         PinchObservation(
             state: .open,
             thumbTip: nil,
             indexTip: nil,
             midpoint: NormalizedPoint(x: 0.40, y: 0.50),
             normalizedDistance: 0.15,
-            confidence: 0.90,
+            confidence: confidence,
             timestamp: timestamp
         )
     }
