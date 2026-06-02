@@ -177,6 +177,12 @@ This step adds camera lifecycle plumbing without Vision or gesture detection:
 - render a virtual cursor
 - keep click, drag, scroll, and OS event dispatch disabled
 
+Phase 7 validation:
+
+- `swift test` passes with 108 tests
+- `Scripts/build-app.sh` builds and codesigns `dist/GestureGaze.app`
+- the pinch cursor remains visual-only; no click, drag, scroll, or OS event dispatch is enabled
+
 ### Phase 8: Temporal Classifier and Cooldowns
 
 - add rolling observation buffers
