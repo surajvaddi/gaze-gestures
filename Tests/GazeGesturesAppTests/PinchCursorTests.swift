@@ -109,6 +109,12 @@ final class PinchCursorTests: XCTestCase {
         XCTAssertEqual(configuration.interpolationFactor, 0.35)
     }
 
+    func testConservativePinchObservationBufferDefaultsAreExplicit() {
+        let configuration = PinchObservationBufferConfiguration.conservativeDefault
+
+        XCTAssertEqual(configuration.capacity, 6)
+    }
+
     func testCustomPinchClassificationConfigurationEquality() {
         let configuration = PinchClassificationConfiguration(
             pinchingDistanceThreshold: 0.05,
@@ -467,6 +473,67 @@ final class PinchCursorTests: XCTestCase {
 
         XCTAssertEqual(fastSmoother.smooth(ScreenPoint(x: 50, y: 60)), ScreenPoint(x: 50, y: 60))
         XCTAssertEqual(lockedSmoother.smooth(ScreenPoint(x: 50, y: 60)), ScreenPoint(x: 0, y: 0))
+    }
+
+    func testPinchObservationBufferKeepsNewestObservationsWithinCapacity() {
+        let buffer = PinchObservationBuffer(
+            configuration: PinchObservationBufferConfiguration(capacity: 3)
+        )
+
+        buffer.append(.pinching(timestamp: 1))
+        buffer.append(.open(timestamp: 2))
+        buffer.append(.unknown(timestamp: 3))
+        buffer.append(.pinching(timestamp: 4))
+
+        XCTAssertEqual(buffer.allObservations().map(\.timestamp), [2, 3, 4])
+    }
+
+    func testPinchObservationBufferPreservesInsertionOrder() {
+        let buffer = PinchObservationBuffer(
+            configuration: PinchObservationBufferConfiguration(capacity: 4)
+        )
+
+        buffer.append(.open(timestamp: 10))
+        buffer.append(.pinching(timestamp: 11))
+        buffer.append(.open(timestamp: 12))
+
+        XCTAssertEqual(buffer.allObservations().map(\.timestamp), [10, 11, 12])
+    }
+
+    func testPinchObservationBufferFiltersByState() {
+        let buffer = PinchObservationBuffer(
+            configuration: PinchObservationBufferConfiguration(capacity: 5)
+        )
+
+        buffer.append(.pinching(timestamp: 20))
+        buffer.append(.open(timestamp: 21))
+        buffer.append(.pinching(timestamp: 22))
+
+        XCTAssertEqual(buffer.observations(matching: .pinching).map(\.timestamp), [20, 22])
+        XCTAssertEqual(buffer.observations(matching: .open).map(\.timestamp), [21])
+        XCTAssertTrue(buffer.observations(matching: .unknown).isEmpty)
+    }
+
+    func testPinchObservationBufferResetClearsObservations() {
+        let buffer = PinchObservationBuffer(
+            configuration: PinchObservationBufferConfiguration(capacity: 3)
+        )
+
+        buffer.append(.pinching(timestamp: 30))
+        buffer.append(.open(timestamp: 31))
+        buffer.reset()
+
+        XCTAssertTrue(buffer.allObservations().isEmpty)
+    }
+
+    func testPinchObservationBufferZeroCapacityStoresNoObservations() {
+        let buffer = PinchObservationBuffer(
+            configuration: PinchObservationBufferConfiguration(capacity: 0)
+        )
+
+        buffer.append(.pinching(timestamp: 40))
+
+        XCTAssertTrue(buffer.allObservations().isEmpty)
     }
 }
 

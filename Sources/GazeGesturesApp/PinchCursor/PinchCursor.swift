@@ -84,6 +84,14 @@ struct PinchCursorSmoothingConfiguration: Equatable {
     )
 }
 
+struct PinchObservationBufferConfiguration: Equatable {
+    var capacity: Int
+
+    static let conservativeDefault = PinchObservationBufferConfiguration(
+        capacity: 6
+    )
+}
+
 struct PinchCursorPoint: Equatable {
     var normalizedPoint: NormalizedPoint
     var confidence: Double
@@ -303,5 +311,41 @@ final class PinchCursorSmoother {
 
     private var clampedInterpolationFactor: Double {
         min(max(configuration.interpolationFactor, 0), 1)
+    }
+}
+
+final class PinchObservationBuffer {
+    private let configuration: PinchObservationBufferConfiguration
+    private var observations: [PinchObservation] = []
+
+    init(configuration: PinchObservationBufferConfiguration = .conservativeDefault) {
+        self.configuration = configuration
+    }
+
+    func append(_ observation: PinchObservation) {
+        observations.append(observation)
+        trimToCapacity()
+    }
+
+    func allObservations() -> [PinchObservation] {
+        observations
+    }
+
+    func observations(matching state: PinchState) -> [PinchObservation] {
+        observations.filter { $0.state == state }
+    }
+
+    func reset() {
+        observations.removeAll()
+    }
+
+    private func trimToCapacity() {
+        let capacity = max(configuration.capacity, 0)
+
+        guard observations.count > capacity else {
+            return
+        }
+
+        observations.removeFirst(observations.count - capacity)
     }
 }
