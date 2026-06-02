@@ -119,6 +119,14 @@ struct TemporalPinchClassifierConfiguration: Equatable {
     )
 }
 
+struct PinchCooldownConfiguration: Equatable {
+    var duration: TimeInterval
+
+    static let conservativeDefault = PinchCooldownConfiguration(
+        duration: 0.35
+    )
+}
+
 struct PinchCursorPoint: Equatable {
     var normalizedPoint: NormalizedPoint
     var confidence: Double
@@ -464,5 +472,30 @@ struct TemporalPinchClassifier {
         }
 
         return observations.allSatisfy { $0.state == firstState }
+    }
+}
+
+final class PinchCooldownController {
+    private let configuration: PinchCooldownConfiguration
+    private var cooldownStart: TimeInterval?
+
+    init(configuration: PinchCooldownConfiguration = .conservativeDefault) {
+        self.configuration = configuration
+    }
+
+    func registerRelease(at timestamp: TimeInterval) {
+        cooldownStart = timestamp
+    }
+
+    func allowsActivation(at timestamp: TimeInterval) -> Bool {
+        guard let cooldownStart else {
+            return true
+        }
+
+        return timestamp >= cooldownStart + max(configuration.duration, 0)
+    }
+
+    func reset() {
+        cooldownStart = nil
     }
 }

@@ -123,6 +123,12 @@ final class PinchCursorTests: XCTestCase {
         XCTAssertEqual(configuration.minimumAverageConfidence, 0.70)
     }
 
+    func testConservativePinchCooldownDefaultsAreExplicit() {
+        let configuration = PinchCooldownConfiguration.conservativeDefault
+
+        XCTAssertEqual(configuration.duration, 0.35)
+    }
+
     func testCustomPinchClassificationConfigurationEquality() {
         let configuration = PinchClassificationConfiguration(
             pinchingDistanceThreshold: 0.05,
@@ -637,6 +643,37 @@ final class PinchCursorTests: XCTestCase {
         XCTAssertEqual(PinchRejectionReason.mappingFailed, .mappingFailed)
         XCTAssertEqual(PinchRejectionReason.cooldownActive, .cooldownActive)
     }
+
+    func testPinchCooldownAllowsActivationBeforeRelease() {
+        let cooldown = PinchCooldownController(configuration: testCooldownConfiguration)
+
+        XCTAssertTrue(cooldown.allowsActivation(at: 1))
+    }
+
+    func testPinchCooldownBlocksActivationDuringCooldown() {
+        let cooldown = PinchCooldownController(configuration: testCooldownConfiguration)
+
+        cooldown.registerRelease(at: 10)
+
+        XCTAssertFalse(cooldown.allowsActivation(at: 10.49))
+    }
+
+    func testPinchCooldownAllowsActivationAfterDurationExpires() {
+        let cooldown = PinchCooldownController(configuration: testCooldownConfiguration)
+
+        cooldown.registerRelease(at: 10)
+
+        XCTAssertTrue(cooldown.allowsActivation(at: 10.50))
+    }
+
+    func testPinchCooldownResetClearsCooldown() {
+        let cooldown = PinchCooldownController(configuration: testCooldownConfiguration)
+
+        cooldown.registerRelease(at: 10)
+        cooldown.reset()
+
+        XCTAssertTrue(cooldown.allowsActivation(at: 10.10))
+    }
 }
 
 private let testPinchConfiguration = PinchClassificationConfiguration(
@@ -671,6 +708,10 @@ private let testTemporalClassifierConfiguration = TemporalPinchClassifierConfigu
     requiredPinchingObservations: 3,
     requiredOpenObservations: 2,
     minimumAverageConfidence: 0.70
+)
+
+private let testCooldownConfiguration = PinchCooldownConfiguration(
+    duration: 0.50
 )
 
 private extension PinchObservation {
