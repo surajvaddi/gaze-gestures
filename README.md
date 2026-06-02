@@ -190,6 +190,14 @@ Phase 7 validation:
 - add cooldown and rejection reasons
 - clear classifier state on cancel and emergency exit
 
+Phase 8 validation:
+
+- `swift test` passes with 134 tests
+- temporal pinch updates require accepted buffered observations
+- rejected temporal windows do not update the virtual cursor
+- cooldown blocks immediate reactivation after pinch release
+- pinch buffers, cooldowns, smoothing, and cursor state reset on lifecycle exits
+
 ### Phase 9: Safe Click Dispatch
 
 - add guarded Accessibility or CGEvent dispatch
