@@ -71,6 +71,38 @@ struct SafeClickGate {
     }
 }
 
+enum PinchClickIntent: Equatable {
+    case none
+    case pressStarted(PinchObservation)
+    case releaseCompleted(PinchObservation)
+}
+
+final class PinchClickIntentTracker {
+    private var hasActivePress = false
+
+    func process(_ observation: PinchObservation) -> PinchClickIntent {
+        switch observation.state {
+        case .pinching where !hasActivePress:
+            hasActivePress = true
+            return .pressStarted(observation)
+        case .pinching:
+            return .none
+        case .open where hasActivePress:
+            hasActivePress = false
+            return .releaseCompleted(observation)
+        case .open:
+            return .none
+        case .unknown:
+            reset()
+            return .none
+        }
+    }
+
+    func reset() {
+        hasActivePress = false
+    }
+}
+
 final class CGEventClickDispatcher: ClickDispatching {
     @discardableResult
     func dispatchLeftClick(at point: ScreenPoint) -> Result<Void, ClickDispatchError> {

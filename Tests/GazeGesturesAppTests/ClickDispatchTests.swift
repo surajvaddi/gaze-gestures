@@ -110,6 +110,75 @@ final class ClickDispatchTests: XCTestCase {
         )
     }
 
+    func testPinchClickIntentTrackerStartsPressOnFirstPinch() {
+        let tracker = PinchClickIntentTracker()
+        let observation = pinchObservation(state: .pinching, timestamp: 1)
+
+        XCTAssertEqual(
+            tracker.process(observation),
+            .pressStarted(observation)
+        )
+    }
+
+    func testPinchClickIntentTrackerIgnoresHeldPinchAfterPressStarts() {
+        let tracker = PinchClickIntentTracker()
+
+        _ = tracker.process(pinchObservation(state: .pinching, timestamp: 1))
+
+        XCTAssertEqual(
+            tracker.process(pinchObservation(state: .pinching, timestamp: 2)),
+            .none
+        )
+    }
+
+    func testPinchClickIntentTrackerIgnoresOpenWithoutPriorPress() {
+        let tracker = PinchClickIntentTracker()
+
+        XCTAssertEqual(
+            tracker.process(pinchObservation(state: .open, timestamp: 1)),
+            .none
+        )
+    }
+
+    func testPinchClickIntentTrackerCompletesReleaseAfterPinchThenOpen() {
+        let tracker = PinchClickIntentTracker()
+        let releaseObservation = pinchObservation(state: .open, timestamp: 2)
+
+        _ = tracker.process(pinchObservation(state: .pinching, timestamp: 1))
+
+        XCTAssertEqual(
+            tracker.process(releaseObservation),
+            .releaseCompleted(releaseObservation)
+        )
+    }
+
+    func testPinchClickIntentTrackerResetClearsActivePress() {
+        let tracker = PinchClickIntentTracker()
+
+        _ = tracker.process(pinchObservation(state: .pinching, timestamp: 1))
+        tracker.reset()
+
+        XCTAssertEqual(
+            tracker.process(pinchObservation(state: .open, timestamp: 2)),
+            .none
+        )
+    }
+
+    func testPinchClickIntentTrackerUnknownObservationClearsActivePress() {
+        let tracker = PinchClickIntentTracker()
+
+        _ = tracker.process(pinchObservation(state: .pinching, timestamp: 1))
+        XCTAssertEqual(
+            tracker.process(pinchObservation(state: .unknown, timestamp: 2)),
+            .none
+        )
+
+        XCTAssertEqual(
+            tracker.process(pinchObservation(state: .open, timestamp: 3)),
+            .none
+        )
+    }
+
     func testRecordingClickDispatcherStoresLeftClickPoints() {
         let dispatcher = RecordingClickDispatcher()
 
@@ -170,4 +239,20 @@ private final class RecordingClickDispatcher: ClickDispatching {
         leftClickPoints.append(point)
         return result
     }
+}
+
+private func pinchObservation(
+    state: PinchState,
+    timestamp: TimeInterval,
+    confidence: Double = 0.90
+) -> PinchObservation {
+    PinchObservation(
+        state: state,
+        thumbTip: nil,
+        indexTip: nil,
+        midpoint: NormalizedPoint(x: 0.4, y: 0.6),
+        normalizedDistance: nil,
+        confidence: confidence,
+        timestamp: timestamp
+    )
 }
