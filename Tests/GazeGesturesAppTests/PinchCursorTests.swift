@@ -87,6 +87,13 @@ final class PinchCursorTests: XCTestCase {
         XCTAssertEqual(configuration.minimumLandmarkConfidence, 0.65)
     }
 
+    func testConservativePinchStabilityDefaultsAreExplicit() {
+        let configuration = PinchStabilityConfiguration.conservativeDefault
+
+        XCTAssertEqual(configuration.requiredPinchingObservations, 3)
+        XCTAssertEqual(configuration.requiredOpenObservations, 3)
+    }
+
     func testCustomPinchClassificationConfigurationEquality() {
         let configuration = PinchClassificationConfiguration(
             pinchingDistanceThreshold: 0.05,
@@ -251,6 +258,60 @@ final class PinchCursorTests: XCTestCase {
         XCTAssertEqual(pinching.state, .pinching)
         XCTAssertEqual(open.state, .open)
     }
+
+    func testPinchStabilityControllerSinglePinchFrameDoesNotEmitStablePinch() {
+        let controller = PinchStabilityController(configuration: testPinchStabilityConfiguration)
+
+        XCTAssertNil(controller.process(.pinching(timestamp: 1)))
+    }
+
+    func testPinchStabilityControllerRequiredPinchStreakEmitsStablePinch() {
+        let controller = PinchStabilityController(configuration: testPinchStabilityConfiguration)
+
+        XCTAssertNil(controller.process(.pinching(timestamp: 1)))
+        XCTAssertNil(controller.process(.pinching(timestamp: 2)))
+        let result = controller.process(.pinching(timestamp: 3))
+
+        XCTAssertEqual(result?.state, .pinching)
+        XCTAssertEqual(result?.timestamp, 3)
+    }
+
+    func testPinchStabilityControllerNoisySequenceDoesNotToggle() {
+        let controller = PinchStabilityController(configuration: testPinchStabilityConfiguration)
+
+        XCTAssertNil(controller.process(.pinching(timestamp: 1)))
+        XCTAssertNil(controller.process(.pinching(timestamp: 2)))
+        XCTAssertNil(controller.process(.unknown(timestamp: 3)))
+        XCTAssertNil(controller.process(.pinching(timestamp: 4)))
+        XCTAssertNil(controller.process(.pinching(timestamp: 5)))
+
+        XCTAssertNil(controller.process(.open(timestamp: 6)))
+    }
+
+    func testPinchStabilityControllerRequiredOpenStreakEmitsStableOpen() {
+        let controller = PinchStabilityController(configuration: testPinchStabilityConfiguration)
+
+        XCTAssertNil(controller.process(.open(timestamp: 50)))
+        XCTAssertNil(controller.process(.open(timestamp: 51)))
+        let result = controller.process(.open(timestamp: 52))
+
+        XCTAssertEqual(result?.state, .open)
+        XCTAssertEqual(result?.timestamp, 52)
+    }
+
+    func testPinchStabilityControllerResetClearsHistory() {
+        let controller = PinchStabilityController(configuration: testPinchStabilityConfiguration)
+
+        XCTAssertNil(controller.process(.pinching(timestamp: 60)))
+        XCTAssertNil(controller.process(.pinching(timestamp: 61)))
+        controller.reset()
+
+        XCTAssertNil(controller.process(.pinching(timestamp: 70)))
+        XCTAssertNil(controller.process(.pinching(timestamp: 71)))
+        let result = controller.process(.pinching(timestamp: 72))
+
+        XCTAssertEqual(result?.state, .pinching)
+    }
 }
 
 private let testPinchConfiguration = PinchClassificationConfiguration(
@@ -258,6 +319,49 @@ private let testPinchConfiguration = PinchClassificationConfiguration(
     openDistanceThreshold: 0.10,
     minimumLandmarkConfidence: 0.65
 )
+
+private let testPinchStabilityConfiguration = PinchStabilityConfiguration(
+    requiredPinchingObservations: 3,
+    requiredOpenObservations: 3
+)
+
+private extension PinchObservation {
+    static func pinching(timestamp: TimeInterval) -> PinchObservation {
+        PinchObservation(
+            state: .pinching,
+            thumbTip: nil,
+            indexTip: nil,
+            midpoint: NormalizedPoint(x: 0.42, y: 0.50),
+            normalizedDistance: 0.04,
+            confidence: 0.90,
+            timestamp: timestamp
+        )
+    }
+
+    static func open(timestamp: TimeInterval) -> PinchObservation {
+        PinchObservation(
+            state: .open,
+            thumbTip: nil,
+            indexTip: nil,
+            midpoint: NormalizedPoint(x: 0.40, y: 0.50),
+            normalizedDistance: 0.15,
+            confidence: 0.90,
+            timestamp: timestamp
+        )
+    }
+
+    static func unknown(timestamp: TimeInterval) -> PinchObservation {
+        PinchObservation(
+            state: .unknown,
+            thumbTip: nil,
+            indexTip: nil,
+            midpoint: nil,
+            normalizedDistance: nil,
+            confidence: 0,
+            timestamp: timestamp
+        )
+    }
+}
 
 private func landmarkObservation(
     thumb: NormalizedPoint,

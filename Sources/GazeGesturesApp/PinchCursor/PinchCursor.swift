@@ -52,6 +52,16 @@ struct PinchClassificationConfiguration: Equatable {
     )
 }
 
+struct PinchStabilityConfiguration: Equatable {
+    var requiredPinchingObservations: Int
+    var requiredOpenObservations: Int
+
+    static let conservativeDefault = PinchStabilityConfiguration(
+        requiredPinchingObservations: 3,
+        requiredOpenObservations: 3
+    )
+}
+
 struct PinchCursorPoint: Equatable {
     var normalizedPoint: NormalizedPoint
     var confidence: Double
@@ -125,5 +135,46 @@ struct PinchDistanceClassifier {
             confidence: 0,
             timestamp: observation.timestamp
         )
+    }
+}
+
+final class PinchStabilityController {
+    private let configuration: PinchStabilityConfiguration
+    private var pinchingObservationCount = 0
+    private var openObservationCount = 0
+
+    init(configuration: PinchStabilityConfiguration = .conservativeDefault) {
+        self.configuration = configuration
+    }
+
+    func process(_ observation: PinchObservation) -> PinchObservation? {
+        switch observation.state {
+        case .pinching:
+            pinchingObservationCount += 1
+            openObservationCount = 0
+
+            guard pinchingObservationCount >= configuration.requiredPinchingObservations else {
+                return nil
+            }
+
+            return observation
+        case .open:
+            openObservationCount += 1
+            pinchingObservationCount = 0
+
+            guard openObservationCount >= configuration.requiredOpenObservations else {
+                return nil
+            }
+
+            return observation
+        case .unknown:
+            reset()
+            return nil
+        }
+    }
+
+    func reset() {
+        pinchingObservationCount = 0
+        openObservationCount = 0
     }
 }
