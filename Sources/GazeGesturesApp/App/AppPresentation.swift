@@ -34,6 +34,12 @@ struct HandDetectionPresentation: Equatable {
     var tint: PresentationTint
 }
 
+struct VirtualCursorPresentation: Equatable {
+    var label: String
+    var helpText: String
+    var tint: PresentationTint
+}
+
 enum AppPresentation {
     static func mode(
         for mode: AppMode,
@@ -180,5 +186,26 @@ enum AppPresentation {
                 tint: .red
             )
         }
+    }
+
+    static func virtualCursor(for state: VirtualCursorState) -> VirtualCursorPresentation {
+        switch state {
+        case .hidden:
+            return VirtualCursorPresentation(
+                label: "Cursor Hidden",
+                helpText: "The pinch cursor is hidden until a stable pinch is mapped.",
+                tint: .gray
+            )
+        case .visible(let point):
+            return VirtualCursorPresentation(
+                label: "Cursor Visible",
+                helpText: "Pinch cursor at x \(formatted(point.x)), y \(formatted(point.y)).",
+                tint: .green
+            )
+        }
+    }
+
+    private static func formatted(_ value: Double) -> String {
+        String(format: "%.0f", value)
     }
 }

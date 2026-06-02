@@ -6,6 +6,7 @@ final class AppState: ObservableObject {
     @Published var permissions = PermissionSnapshot.unknown
     @Published var cameraSessionState: CameraSessionState = .idle
     @Published var handDetectionState: HandDetectionState = .idle
+    @Published var virtualCursorState: VirtualCursorState = .hidden
 }
 
 enum AppMode: String, CaseIterable, Identifiable {
@@ -57,6 +58,11 @@ enum HandDetectionState: Equatable {
     case detected
     case lost
     case failed(String)
+}
+
+enum VirtualCursorState: Equatable {
+    case hidden
+    case visible(ScreenPoint)
 }
 
 struct PermissionSnapshot {

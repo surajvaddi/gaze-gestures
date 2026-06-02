@@ -81,4 +81,17 @@ final class AppPresentationTests: XCTestCase {
         XCTAssertEqual(failed.helpText, "Vision request failed")
         XCTAssertEqual(failed.tint, .red)
     }
+
+    func testVirtualCursorPresentationCoversVisibilityLifecycle() {
+        let hidden = AppPresentation.virtualCursor(for: .hidden)
+        let visible = AppPresentation.virtualCursor(
+            for: .visible(ScreenPoint(x: 120.4, y: 250.6))
+        )
+
+        XCTAssertEqual(hidden.label, "Cursor Hidden")
+        XCTAssertEqual(hidden.tint, .gray)
+        XCTAssertEqual(visible.label, "Cursor Visible")
+        XCTAssertEqual(visible.helpText, "Pinch cursor at x 120, y 251.")
+        XCTAssertEqual(visible.tint, .green)
+    }
 }
