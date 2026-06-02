@@ -30,6 +30,21 @@ enum PinchState: Equatable {
     case pinching
 }
 
+enum PinchRejectionReason: Equatable {
+    case insufficientObservations
+    case unknownObservation
+    case noisyMixedStates
+    case lowConfidence
+    case missingScreenBounds
+    case mappingFailed
+    case cooldownActive
+}
+
+enum TemporalPinchClassificationResult: Equatable {
+    case accepted(PinchObservation)
+    case rejected(PinchRejectionReason)
+}
+
 struct PinchObservation: Equatable {
     var state: PinchState
     var thumbTip: HandLandmarkPoint?
@@ -370,12 +385,20 @@ struct TemporalPinchClassifier {
     }
 
     func classify(_ observations: [PinchObservation]) -> PinchObservation? {
-        guard !observations.isEmpty else {
+        guard case .accepted(let observation) = evaluate(observations) else {
             return nil
         }
 
+        return observation
+    }
+
+    func evaluate(_ observations: [PinchObservation]) -> TemporalPinchClassificationResult {
+        guard !observations.isEmpty else {
+            return .rejected(.insufficientObservations)
+        }
+
         guard !observations.contains(where: { $0.state == .unknown }) else {
-            return nil
+            return .rejected(.unknownObservation)
         }
 
         if let pinching = stableObservation(
@@ -383,14 +406,27 @@ struct TemporalPinchClassifier {
             state: .pinching,
             requiredCount: configuration.requiredPinchingObservations
         ) {
-            return pinching
+            return .accepted(pinching)
         }
 
-        return stableObservation(
+        if let open = stableObservation(
             in: observations,
             state: .open,
             requiredCount: configuration.requiredOpenObservations
-        )
+        ) {
+            return .accepted(open)
+        }
+
+        if containsOnlySupportedState(observations),
+           averageConfidence(in: observations) < configuration.minimumAverageConfidence {
+            return .rejected(.lowConfidence)
+        }
+
+        if !containsOnlySupportedState(observations) {
+            return .rejected(.noisyMixedStates)
+        }
+
+        return .rejected(.insufficientObservations)
     }
 
     private func stableObservation(
@@ -420,5 +456,13 @@ struct TemporalPinchClassifier {
         }
 
         return total / Double(observations.count)
+    }
+
+    private func containsOnlySupportedState(_ observations: [PinchObservation]) -> Bool {
+        guard let firstState = observations.first?.state else {
+            return false
+        }
+
+        return observations.allSatisfy { $0.state == firstState }
     }
 }

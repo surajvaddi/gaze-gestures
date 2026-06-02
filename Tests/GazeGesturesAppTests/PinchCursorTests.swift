@@ -555,6 +555,14 @@ final class PinchCursorTests: XCTestCase {
 
         XCTAssertEqual(observation?.state, .pinching)
         XCTAssertEqual(observation?.timestamp, 70)
+        XCTAssertEqual(
+            classifier.evaluate([
+                .pinching(timestamp: 1),
+                .pinching(timestamp: 61),
+                .pinching(timestamp: 70)
+            ]),
+            .accepted(.pinching(timestamp: 70))
+        )
     }
 
     func testTemporalPinchClassifierAcceptsStableOpenWindow() {
@@ -571,50 +579,63 @@ final class PinchCursorTests: XCTestCase {
 
     func testTemporalPinchClassifierRejectsNoisyMixedWindow() {
         let classifier = TemporalPinchClassifier(configuration: testTemporalClassifierConfiguration)
-
-        let observation = classifier.classify([
+        let observations: [PinchObservation] = [
             .pinching(timestamp: 70),
             .open(timestamp: 61),
             .pinching(timestamp: 62)
-        ])
+        ]
+
+        let observation = classifier.classify(observations)
 
         XCTAssertNil(observation)
+        XCTAssertEqual(classifier.evaluate(observations), .rejected(.noisyMixedStates))
     }
 
     func testTemporalPinchClassifierRejectsUnknownWindow() {
         let classifier = TemporalPinchClassifier(configuration: testTemporalClassifierConfiguration)
-
-        let observation = classifier.classify([
+        let observations: [PinchObservation] = [
             .pinching(timestamp: 70),
             .unknown(timestamp: 61),
             .pinching(timestamp: 62)
-        ])
+        ]
+
+        let observation = classifier.classify(observations)
 
         XCTAssertNil(observation)
+        XCTAssertEqual(classifier.evaluate(observations), .rejected(.unknownObservation))
     }
 
     func testTemporalPinchClassifierRejectsLowAverageConfidence() {
         let classifier = TemporalPinchClassifier(configuration: testTemporalClassifierConfiguration)
-
-        let observation = classifier.classify([
+        let observations: [PinchObservation] = [
             .pinching(timestamp: 70, confidence: 0.60),
             .pinching(timestamp: 61, confidence: 0.65),
             .pinching(timestamp: 62, confidence: 0.70)
-        ])
+        ]
+
+        let observation = classifier.classify(observations)
 
         XCTAssertNil(observation)
+        XCTAssertEqual(classifier.evaluate(observations), .rejected(.lowConfidence))
     }
 
     func testTemporalPinchClassifierRejectsInsufficientObservations() {
         let classifier = TemporalPinchClassifier(configuration: testTemporalClassifierConfiguration)
+        let observations: [PinchObservation] = [
+            .pinching(timestamp: 70),
+            .pinching(timestamp: 60)
+        ]
 
-        XCTAssertNil(
-            classifier.classify([
-                .pinching(timestamp: 70),
-                .pinching(timestamp: 60)
-            ])
-        )
+        XCTAssertNil(classifier.classify(observations))
+        XCTAssertEqual(classifier.evaluate(observations), .rejected(.insufficientObservations))
         XCTAssertNil(classifier.classify([]))
+        XCTAssertEqual(classifier.evaluate([]), .rejected(.insufficientObservations))
+    }
+
+    func testPinchRejectionReasonsCoverPipelineFailures() {
+        XCTAssertEqual(PinchRejectionReason.missingScreenBounds, .missingScreenBounds)
+        XCTAssertEqual(PinchRejectionReason.mappingFailed, .mappingFailed)
+        XCTAssertEqual(PinchRejectionReason.cooldownActive, .cooldownActive)
     }
 }
 
