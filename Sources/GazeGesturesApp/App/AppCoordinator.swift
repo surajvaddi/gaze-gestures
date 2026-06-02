@@ -17,6 +17,7 @@ final class AppCoordinator {
     private let pinchCursorMapper: PinchCursorMapper
     private let pinchCursorSmoother: PinchCursorSmoother
     private let safeClickGate: SafeClickGate
+    private let clickCooldownController: ClickCooldownController
     private let pinchClickIntentTracker: PinchClickIntentTracker
     private let clickDispatcher: ClickDispatching
     private let screenBoundsProvider: ScreenBoundsProviding
@@ -40,6 +41,7 @@ final class AppCoordinator {
         pinchCursorMapper: PinchCursorMapper = PinchCursorMapper(),
         pinchCursorSmoother: PinchCursorSmoother = PinchCursorSmoother(),
         safeClickGate: SafeClickGate = SafeClickGate(),
+        clickCooldownController: ClickCooldownController = ClickCooldownController(),
         pinchClickIntentTracker: PinchClickIntentTracker = PinchClickIntentTracker(),
         clickDispatcher: ClickDispatching = CGEventClickDispatcher(),
         screenBoundsProvider: ScreenBoundsProviding = AppKitScreenBoundsProvider()
@@ -59,6 +61,7 @@ final class AppCoordinator {
         self.pinchCursorMapper = pinchCursorMapper
         self.pinchCursorSmoother = pinchCursorSmoother
         self.safeClickGate = safeClickGate
+        self.clickCooldownController = clickCooldownController
         self.pinchClickIntentTracker = pinchClickIntentTracker
         self.clickDispatcher = clickDispatcher
         self.screenBoundsProvider = screenBoundsProvider
@@ -254,11 +257,11 @@ final class AppCoordinator {
             )
             appState.lastEventDescription = "Pinch cursor active"
         case .open:
-            handlePinchClickIntent(clickIntent, for: stableObservation)
+            let handledClickOutcome = handlePinchClickIntent(clickIntent, for: stableObservation)
             pinchCooldownController.registerRelease(at: stableObservation.timestamp)
             pinchObservationBuffer.reset()
             hidePinchCursor()
-            if appState.lastEventDescription != "Pinch click dispatched" {
+            if !handledClickOutcome {
                 appState.lastEventDescription = "Pinch released"
             }
         case .unknown:
@@ -269,9 +272,9 @@ final class AppCoordinator {
     private func handlePinchClickIntent(
         _ intent: PinchClickIntent,
         for stableObservation: PinchObservation
-    ) {
+    ) -> Bool {
         guard case .releaseCompleted = intent else {
-            return
+            return false
         }
 
         let decision = safeClickGate.evaluate(
@@ -281,19 +284,26 @@ final class AppCoordinator {
                 confidence: stableObservation.confidence,
                 isReleaseIntent: true,
                 allowsClick: pinchCooldownController.allowsActivation(at: stableObservation.timestamp)
+                    && clickCooldownController.allowsClick(at: stableObservation.timestamp)
             )
         )
 
         guard case .accepted(let point) = decision else {
-            return
+            if case .rejected(let reason) = decision {
+                appState.lastEventDescription = "Pinch click blocked: \(reason.userMessage)"
+            }
+            return true
         }
 
         switch clickDispatcher.dispatchLeftClick(at: point) {
         case .success:
+            clickCooldownController.registerClick(at: stableObservation.timestamp)
             appState.lastEventDescription = "Pinch click dispatched"
         case .failure:
             appState.lastEventDescription = "Pinch click failed"
         }
+
+        return true
     }
 
     private func handleHandLandmarkFailure(_ message: String) {
@@ -358,6 +368,7 @@ final class AppCoordinator {
         pinchStabilityController.reset()
         pinchObservationBuffer.reset()
         pinchCooldownController.reset()
+        clickCooldownController.reset()
         pinchClickIntentTracker.reset()
         pinchCursorSmoother.reset()
         appState.virtualCursorState = .hidden

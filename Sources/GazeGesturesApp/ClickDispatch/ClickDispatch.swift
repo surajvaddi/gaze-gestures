@@ -17,6 +17,21 @@ enum SafeClickRejectionReason: Equatable {
     case hiddenCursor
     case lowConfidence
     case cooldownActive
+
+    var userMessage: String {
+        switch self {
+        case .incorrectMode:
+            return "incorrect mode"
+        case .missingReleaseIntent:
+            return "missing release intent"
+        case .hiddenCursor:
+            return "hidden cursor"
+        case .lowConfidence:
+            return "low confidence"
+        case .cooldownActive:
+            return "cooldown active"
+        }
+    }
 }
 
 enum SafeClickGateDecision: Equatable {
@@ -69,6 +84,39 @@ struct SafeClickGate {
         }
 
         return .accepted(point)
+    }
+}
+
+struct ClickCooldownConfiguration: Equatable {
+    var duration: TimeInterval
+
+    static let conservativeDefault = ClickCooldownConfiguration(
+        duration: 0.35
+    )
+}
+
+final class ClickCooldownController {
+    private let configuration: ClickCooldownConfiguration
+    private var clickTimestamp: TimeInterval?
+
+    init(configuration: ClickCooldownConfiguration = .conservativeDefault) {
+        self.configuration = configuration
+    }
+
+    func registerClick(at timestamp: TimeInterval) {
+        clickTimestamp = timestamp
+    }
+
+    func allowsClick(at timestamp: TimeInterval) -> Bool {
+        guard let clickTimestamp else {
+            return true
+        }
+
+        return timestamp >= clickTimestamp + max(configuration.duration, 0)
+    }
+
+    func reset() {
+        clickTimestamp = nil
     }
 }
 

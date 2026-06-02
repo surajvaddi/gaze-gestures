@@ -8,6 +8,12 @@ final class ClickDispatchTests: XCTestCase {
         XCTAssertEqual(configuration.minimumConfidence, 0.70)
     }
 
+    func testConservativeClickCooldownDefaultsAreExplicit() {
+        let configuration = ClickCooldownConfiguration.conservativeDefault
+
+        XCTAssertEqual(configuration.duration, 0.35)
+    }
+
     func testSafeClickGateAcceptsHandGestureReleaseWithVisibleCursorAndConfidence() {
         let gate = SafeClickGate(configuration: SafeClickGateConfiguration(minimumConfidence: 0.80))
 
@@ -177,6 +183,45 @@ final class ClickDispatchTests: XCTestCase {
             tracker.process(pinchObservation(state: .open, timestamp: 3)),
             .none
         )
+    }
+
+    func testClickCooldownAllowsClickBeforeFirstDispatch() {
+        let cooldown = ClickCooldownController(
+            configuration: ClickCooldownConfiguration(duration: 1)
+        )
+
+        XCTAssertTrue(cooldown.allowsClick(at: 10))
+    }
+
+    func testClickCooldownBlocksClickDuringCooldown() {
+        let cooldown = ClickCooldownController(
+            configuration: ClickCooldownConfiguration(duration: 1)
+        )
+
+        cooldown.registerClick(at: 10)
+
+        XCTAssertFalse(cooldown.allowsClick(at: 10.99))
+    }
+
+    func testClickCooldownAllowsClickAfterDurationExpires() {
+        let cooldown = ClickCooldownController(
+            configuration: ClickCooldownConfiguration(duration: 1)
+        )
+
+        cooldown.registerClick(at: 10)
+
+        XCTAssertTrue(cooldown.allowsClick(at: 11))
+    }
+
+    func testClickCooldownResetClearsCooldown() {
+        let cooldown = ClickCooldownController(
+            configuration: ClickCooldownConfiguration(duration: 1)
+        )
+
+        cooldown.registerClick(at: 10)
+        cooldown.reset()
+
+        XCTAssertTrue(cooldown.allowsClick(at: 10.50))
     }
 
     func testRecordingClickDispatcherStoresLeftClickPoints() {
