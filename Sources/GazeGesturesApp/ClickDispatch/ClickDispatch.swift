@@ -15,6 +15,8 @@ protocol ClickDispatching {
     func dispatchLeftMouseDrag(to point: ScreenPoint) -> Result<Void, ClickDispatchError>
     @discardableResult
     func dispatchLeftMouseUp(at point: ScreenPoint) -> Result<Void, ClickDispatchError>
+    @discardableResult
+    func dispatchScroll(_ delta: HandScrollDelta) -> Result<Void, ClickDispatchError>
 }
 
 enum SafeClickRejectionReason: Equatable {
@@ -194,6 +196,19 @@ final class CGEventClickDispatcher: ClickDispatching {
         dispatchMouseEvent(.leftMouseUp, at: point)
     }
 
+    @discardableResult
+    func dispatchScroll(_ delta: HandScrollDelta) -> Result<Void, ClickDispatchError> {
+        guard accessibilityTrusted() else {
+            return .failure(.accessibilityNotTrusted)
+        }
+
+        guard postScrollEvent(delta) else {
+            return .failure(.eventCreationFailed)
+        }
+
+        return .success(())
+    }
+
     private func dispatchMouseEvent(
         _ type: CGEventType,
         at point: ScreenPoint
@@ -223,5 +238,31 @@ final class CGEventClickDispatcher: ClickDispatching {
 
         event.post(tap: .cghidEventTap)
         return true
+    }
+
+    private func postScrollEvent(_ delta: HandScrollDelta) -> Bool {
+        guard let event = CGEvent(
+            scrollWheelEvent2Source: nil,
+            units: .pixel,
+            wheelCount: 2,
+            wheel1: clampedScrollWheelValue(delta.vertical),
+            wheel2: clampedScrollWheelValue(delta.horizontal),
+            wheel3: 0
+        ) else {
+            return false
+        }
+
+        event.post(tap: .cghidEventTap)
+        return true
+    }
+
+    private func clampedScrollWheelValue(_ value: Double) -> Int32 {
+        let roundedValue = value.rounded()
+        let clampedValue = min(
+            max(roundedValue, Double(Int32.min)),
+            Double(Int32.max)
+        )
+
+        return Int32(clampedValue)
     }
 }

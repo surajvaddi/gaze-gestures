@@ -1195,6 +1195,7 @@ private struct CoordinatorScreenBoundsProvider: ScreenBoundsProviding {
 private final class CoordinatorClickDispatcher: ClickDispatching {
     private(set) var leftClickPoints: [ScreenPoint] = []
     private(set) var dragEvents: [CoordinatorDragEvent] = []
+    private(set) var scrollDeltas: [HandScrollDelta] = []
     var result: Result<Void, ClickDispatchError> = .success(())
 
     func dispatchLeftClick(at point: ScreenPoint) -> Result<Void, ClickDispatchError> {
@@ -1216,6 +1217,15 @@ private final class CoordinatorClickDispatcher: ClickDispatching {
 
     func dispatchLeftMouseUp(at point: ScreenPoint) -> Result<Void, ClickDispatchError> {
         recordDragEvent(.up(point))
+    }
+
+    func dispatchScroll(_ delta: HandScrollDelta) -> Result<Void, ClickDispatchError> {
+        guard case .success = result else {
+            return result
+        }
+
+        scrollDeltas.append(delta)
+        return result
     }
 
     private func recordDragEvent(_ event: CoordinatorDragEvent) -> Result<Void, ClickDispatchError> {

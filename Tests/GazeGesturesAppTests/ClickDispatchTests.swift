@@ -266,6 +266,21 @@ final class ClickDispatchTests: XCTestCase {
         )
     }
 
+    func testRecordingClickDispatcherStoresScrollDeltas() {
+        let dispatcher = RecordingClickDispatcher()
+
+        XCTAssertTrue(
+            dispatcher
+                .dispatchScroll(HandScrollDelta(horizontal: 3, vertical: -7))
+                .isSuccess
+        )
+
+        XCTAssertEqual(
+            dispatcher.scrollDeltas,
+            [HandScrollDelta(horizontal: 3, vertical: -7)]
+        )
+    }
+
     func testCGEventClickDispatcherRejectsWhenAccessibilityIsNotTrusted() {
         let dispatcher = CGEventClickDispatcher(accessibilityTrusted: { false })
 
@@ -283,6 +298,10 @@ final class ClickDispatchTests: XCTestCase {
         )
         XCTAssertEqual(
             dispatcher.dispatchLeftMouseUp(at: ScreenPoint(x: 10, y: 20)).failure,
+            .accessibilityNotTrusted
+        )
+        XCTAssertEqual(
+            dispatcher.dispatchScroll(HandScrollDelta(horizontal: 1, vertical: -1)).failure,
             .accessibilityNotTrusted
         )
     }
@@ -310,6 +329,7 @@ private final class RecordingClickDispatcher: ClickDispatching {
     private let result: Result<Void, ClickDispatchError>
     private(set) var leftClickPoints: [ScreenPoint] = []
     private(set) var dragEvents: [RecordedDragEvent] = []
+    private(set) var scrollDeltas: [HandScrollDelta] = []
 
     init(result: Result<Void, ClickDispatchError> = .success(())) {
         self.result = result
@@ -334,6 +354,15 @@ private final class RecordingClickDispatcher: ClickDispatching {
 
     func dispatchLeftMouseUp(at point: ScreenPoint) -> Result<Void, ClickDispatchError> {
         recordDragEvent(.up(point))
+    }
+
+    func dispatchScroll(_ delta: HandScrollDelta) -> Result<Void, ClickDispatchError> {
+        guard case .success = result else {
+            return result
+        }
+
+        scrollDeltas.append(delta)
+        return result
     }
 
     private func recordDragEvent(_ event: RecordedDragEvent) -> Result<Void, ClickDispatchError> {
