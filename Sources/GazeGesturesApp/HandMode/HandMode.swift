@@ -135,6 +135,93 @@ final class HandActionControlController {
     }
 }
 
+enum HandCalibrationDominantHand: Equatable {
+    case unknown
+    case left
+    case right
+}
+
+struct HandCalibrationProfile: Equatable {
+    var dominantHand: HandCalibrationDominantHand
+    var minimumLandmarkConfidence: Double
+    var pinchingDistanceThreshold: Double
+    var openDistanceThreshold: Double
+    var cursorMinimumConfidence: Double
+    var mirrorsCursorHorizontally: Bool
+    var invertsCursorVertically: Bool
+    var dragHoldDuration: TimeInterval
+    var dragMinimumMovement: Double
+    var scrollMinimumMovement: Double
+    var horizontalScrollScale: Double
+    var verticalScrollScale: Double
+
+    static let conservativeDefault = HandCalibrationProfile(
+        dominantHand: .unknown,
+        minimumLandmarkConfidence: PinchClassificationConfiguration
+            .conservativeDefault
+            .minimumLandmarkConfidence,
+        pinchingDistanceThreshold: PinchClassificationConfiguration
+            .conservativeDefault
+            .pinchingDistanceThreshold,
+        openDistanceThreshold: PinchClassificationConfiguration
+            .conservativeDefault
+            .openDistanceThreshold,
+        cursorMinimumConfidence: PinchCursorMappingConfiguration
+            .conservativeDefault
+            .minimumConfidence,
+        mirrorsCursorHorizontally: PinchCursorMappingConfiguration
+            .conservativeDefault
+            .mirrorsHorizontally,
+        invertsCursorVertically: PinchCursorMappingConfiguration
+            .conservativeDefault
+            .invertsVertically,
+        dragHoldDuration: PinchDragConfiguration.conservativeDefault.holdDuration,
+        dragMinimumMovement: PinchDragConfiguration.conservativeDefault.minimumMovement,
+        scrollMinimumMovement: HandScrollConfiguration.conservativeDefault.minimumMovement,
+        horizontalScrollScale: HandScrollConfiguration.conservativeDefault.horizontalScale,
+        verticalScrollScale: HandScrollConfiguration.conservativeDefault.verticalScale
+    )
+
+    func pinchClassificationConfiguration() -> PinchClassificationConfiguration {
+        PinchClassificationConfiguration(
+            pinchingDistanceThreshold: pinchingDistanceThreshold,
+            openDistanceThreshold: openDistanceThreshold,
+            minimumLandmarkConfidence: minimumLandmarkConfidence
+        )
+    }
+
+    func cursorMappingConfiguration(requiredState: PinchState?) -> PinchCursorMappingConfiguration {
+        PinchCursorMappingConfiguration(
+            minimumConfidence: cursorMinimumConfidence,
+            mirrorsHorizontally: mirrorsCursorHorizontally,
+            invertsVertically: invertsCursorVertically,
+            requiredState: requiredState
+        )
+    }
+
+    func dragConfiguration() -> PinchDragConfiguration {
+        PinchDragConfiguration(
+            holdDuration: dragHoldDuration,
+            minimumMovement: dragMinimumMovement
+        )
+    }
+
+    func scrollConfiguration() -> HandScrollConfiguration {
+        HandScrollConfiguration(
+            minimumMovement: scrollMinimumMovement,
+            horizontalScale: horizontalScrollScale,
+            verticalScale: verticalScrollScale
+        )
+    }
+
+    func applyingDominantHandDefaults(_ dominantHand: HandCalibrationDominantHand) -> HandCalibrationProfile {
+        var profile = self
+        profile.dominantHand = dominantHand
+        profile.mirrorsCursorHorizontally = dominantHand == .left
+        return profile
+    }
+}
+
 struct PinchDragConfiguration: Equatable {
     var holdDuration: TimeInterval
     var minimumMovement: Double

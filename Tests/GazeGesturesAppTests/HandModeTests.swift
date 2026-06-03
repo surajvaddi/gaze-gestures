@@ -91,6 +91,90 @@ final class HandModeTests: XCTestCase {
         XCTAssertFalse(controller.isFrozen)
     }
 
+    func testHandCalibrationProfileDefaultMatchesConservativeConfigurations() {
+        let profile = HandCalibrationProfile.conservativeDefault
+
+        XCTAssertEqual(
+            profile.pinchClassificationConfiguration(),
+            .conservativeDefault
+        )
+        XCTAssertEqual(
+            profile.cursorMappingConfiguration(requiredState: .pinching),
+            PinchCursorMappingConfiguration(
+                minimumConfidence: PinchCursorMappingConfiguration
+                    .conservativeDefault
+                    .minimumConfidence,
+                mirrorsHorizontally: true,
+                invertsVertically: false,
+                requiredState: .pinching
+            )
+        )
+        XCTAssertEqual(profile.dragConfiguration(), .conservativeDefault)
+        XCTAssertEqual(profile.scrollConfiguration(), .conservativeDefault)
+    }
+
+    func testHandCalibrationProfileBuildsCustomConfigurations() {
+        let profile = HandCalibrationProfile(
+            dominantHand: .right,
+            minimumLandmarkConfidence: 0.70,
+            pinchingDistanceThreshold: 0.04,
+            openDistanceThreshold: 0.14,
+            cursorMinimumConfidence: 0.80,
+            mirrorsCursorHorizontally: true,
+            invertsCursorVertically: false,
+            dragHoldDuration: 0.30,
+            dragMinimumMovement: 5,
+            scrollMinimumMovement: 6,
+            horizontalScrollScale: 0.75,
+            verticalScrollScale: -0.50
+        )
+
+        XCTAssertEqual(
+            profile.pinchClassificationConfiguration(),
+            PinchClassificationConfiguration(
+                pinchingDistanceThreshold: 0.04,
+                openDistanceThreshold: 0.14,
+                minimumLandmarkConfidence: 0.70
+            )
+        )
+        XCTAssertEqual(
+            profile.cursorMappingConfiguration(requiredState: .open),
+            PinchCursorMappingConfiguration(
+                minimumConfidence: 0.80,
+                mirrorsHorizontally: true,
+                invertsVertically: false,
+                requiredState: .open
+            )
+        )
+        XCTAssertEqual(
+            profile.dragConfiguration(),
+            PinchDragConfiguration(holdDuration: 0.30, minimumMovement: 5)
+        )
+        XCTAssertEqual(
+            profile.scrollConfiguration(),
+            HandScrollConfiguration(
+                minimumMovement: 6,
+                horizontalScale: 0.75,
+                verticalScale: -0.50
+            )
+        )
+    }
+
+    func testHandCalibrationProfileAppliesDominantHandMirroringDefaults() {
+        let baseProfile = HandCalibrationProfile.conservativeDefault
+
+        XCTAssertTrue(
+            baseProfile
+                .applyingDominantHandDefaults(.left)
+                .mirrorsCursorHorizontally
+        )
+        XCTAssertFalse(
+            baseProfile
+                .applyingDominantHandDefaults(.right)
+                .mirrorsCursorHorizontally
+        )
+    }
+
     func testConservativeHandScrollConfigurationDefaultsAreExplicit() {
         let configuration = HandScrollConfiguration.conservativeDefault
 
