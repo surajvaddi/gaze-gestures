@@ -628,6 +628,34 @@ final class AppCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.appState.lastEventDescription, "Pinch click dispatched")
     }
 
+    func testFrozenHandActionsBlockPinchClickDispatch() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let handLandmarkDetector = CoordinatorHandLandmarkDetector()
+        let clickDispatcher = CoordinatorClickDispatcher()
+        let coordinator = pinchCoordinator(
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector,
+            handLandmarkDetector: handLandmarkDetector,
+            clickDispatcher: clickDispatcher,
+            handActionControlController: HandActionControlController(isFrozen: true)
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        handPresenceDetector.publishStablePresent()
+        handLandmarkDetector.publish(.pinching(timestamp: 70))
+        handLandmarkDetector.publish(.pinching(timestamp: 70.10))
+        handLandmarkDetector.publish(.open(timestamp: 71))
+        handLandmarkDetector.publish(.open(timestamp: 71.10))
+
+        XCTAssertEqual(clickDispatcher.leftClickPoints, [])
+        XCTAssertEqual(coordinator.appState.lastEventDescription, "Hand actions frozen")
+    }
+
     func testOpenWithoutPriorPinchDoesNotDispatchLeftClick() {
         let hotkeyManager = CoordinatorHotkeyManager()
         let cameraSessionManager = CoordinatorCameraSessionManager()
@@ -1290,7 +1318,8 @@ private func pinchCoordinator(
     clickDispatcher: ClickDispatching = CoordinatorClickDispatcher(),
     clickCooldownController: ClickCooldownController = ClickCooldownController(),
     pinchDragIntentTracker: PinchDragIntentTracker = PinchDragIntentTracker(),
-    handScrollIntentDetector: HandScrollIntentDetector = HandScrollIntentDetector()
+    handScrollIntentDetector: HandScrollIntentDetector = HandScrollIntentDetector(),
+    handActionControlController: HandActionControlController = HandActionControlController()
 ) -> AppCoordinator {
     AppCoordinator(
         permissionProvider: CoordinatorPermissionProvider(
@@ -1333,6 +1362,7 @@ private func pinchCoordinator(
         clickCooldownController: clickCooldownController,
         pinchDragIntentTracker: pinchDragIntentTracker,
         handScrollIntentDetector: handScrollIntentDetector,
+        handActionControlController: handActionControlController,
         clickDispatcher: clickDispatcher,
         screenBoundsProvider: CoordinatorScreenBoundsProvider()
     )

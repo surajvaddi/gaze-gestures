@@ -103,6 +103,38 @@ enum HandModeActionState: Equatable {
     }
 }
 
+enum HandActionControlDecision: Equatable {
+    case accepted(HandModeAction)
+    case blockedFrozen(HandModeAction)
+    case freezeChanged(Bool)
+    case cancelled
+}
+
+final class HandActionControlController {
+    private(set) var isFrozen: Bool
+
+    init(isFrozen: Bool = false) {
+        self.isFrozen = isFrozen
+    }
+
+    func evaluate(_ action: HandModeAction) -> HandActionControlDecision {
+        switch action {
+        case .freeze(let isFrozen):
+            self.isFrozen = isFrozen
+            return .freezeChanged(isFrozen)
+        case .cancel:
+            self.isFrozen = false
+            return .cancelled
+        case .click, .drag, .scroll:
+            guard !self.isFrozen else {
+                return .blockedFrozen(action)
+            }
+
+            return .accepted(action)
+        }
+    }
+}
+
 struct PinchDragConfiguration: Equatable {
     var holdDuration: TimeInterval
     var minimumMovement: Double

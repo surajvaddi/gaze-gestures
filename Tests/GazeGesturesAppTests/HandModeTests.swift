@@ -57,6 +57,40 @@ final class HandModeTests: XCTestCase {
         XCTAssertTrue(HandModeActionState.cancelled.isTerminal)
     }
 
+    func testHandActionControlControllerAcceptsActionsWhenUnfrozen() {
+        let controller = HandActionControlController()
+        let action = HandModeAction.click(ScreenPoint(x: 10, y: 20))
+
+        XCTAssertEqual(controller.evaluate(action), .accepted(action))
+    }
+
+    func testHandActionControlControllerBlocksActionsWhenFrozen() {
+        let controller = HandActionControlController()
+        XCTAssertEqual(controller.evaluate(.freeze(true)), .freezeChanged(true))
+
+        let action = HandModeAction.scroll(HandScrollDelta(horizontal: 0, vertical: 4))
+
+        XCTAssertEqual(controller.evaluate(action), .blockedFrozen(action))
+        XCTAssertTrue(controller.isFrozen)
+    }
+
+    func testHandActionControlControllerUnfreezesActions() {
+        let controller = HandActionControlController(isFrozen: true)
+        XCTAssertEqual(controller.evaluate(.freeze(false)), .freezeChanged(false))
+
+        let action = HandModeAction.drag(.started(ScreenPoint(x: 10, y: 20)))
+
+        XCTAssertEqual(controller.evaluate(action), .accepted(action))
+        XCTAssertFalse(controller.isFrozen)
+    }
+
+    func testHandActionControlControllerCancelClearsFreeze() {
+        let controller = HandActionControlController(isFrozen: true)
+
+        XCTAssertEqual(controller.evaluate(.cancel), .cancelled)
+        XCTAssertFalse(controller.isFrozen)
+    }
+
     func testConservativeHandScrollConfigurationDefaultsAreExplicit() {
         let configuration = HandScrollConfiguration.conservativeDefault
 

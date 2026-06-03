@@ -22,6 +22,7 @@ final class AppCoordinator {
     private let pinchClickIntentTracker: PinchClickIntentTracker
     private let pinchDragIntentTracker: PinchDragIntentTracker
     private let handScrollIntentDetector: HandScrollIntentDetector
+    private let handActionControlController: HandActionControlController
     private let clickDispatcher: ClickDispatching
     private let screenBoundsProvider: ScreenBoundsProviding
     private let modeController: ModeController
@@ -56,6 +57,7 @@ final class AppCoordinator {
         pinchClickIntentTracker: PinchClickIntentTracker = PinchClickIntentTracker(),
         pinchDragIntentTracker: PinchDragIntentTracker = PinchDragIntentTracker(),
         handScrollIntentDetector: HandScrollIntentDetector = HandScrollIntentDetector(),
+        handActionControlController: HandActionControlController = HandActionControlController(),
         clickDispatcher: ClickDispatching = CGEventClickDispatcher(),
         screenBoundsProvider: ScreenBoundsProviding = AppKitScreenBoundsProvider()
     ) {
@@ -79,6 +81,7 @@ final class AppCoordinator {
         self.pinchClickIntentTracker = pinchClickIntentTracker
         self.pinchDragIntentTracker = pinchDragIntentTracker
         self.handScrollIntentDetector = handScrollIntentDetector
+        self.handActionControlController = handActionControlController
         self.clickDispatcher = clickDispatcher
         self.screenBoundsProvider = screenBoundsProvider
         self.modeController = ModeController(
@@ -311,6 +314,10 @@ final class AppCoordinator {
         case .none:
             return false
         case .scrolled(let delta):
+            guard handActionAllowed(.scroll(delta)) else {
+                return true
+            }
+
             switch clickDispatcher.dispatchScroll(delta) {
             case .success:
                 appState.lastEventDescription = "Scrolled"
@@ -326,6 +333,10 @@ final class AppCoordinator {
         case .none:
             return false
         case .started(let point):
+            guard handActionAllowed(.drag(.started(point))) else {
+                return true
+            }
+
             switch clickDispatcher.dispatchLeftMouseDown(at: point) {
             case .success:
                 appState.lastEventDescription = "Drag started"
@@ -334,6 +345,10 @@ final class AppCoordinator {
             }
             return true
         case .moved(let point):
+            guard handActionAllowed(.drag(.moved(point))) else {
+                return true
+            }
+
             switch clickDispatcher.dispatchLeftMouseDrag(to: point) {
             case .success:
                 appState.lastEventDescription = "Dragging"
@@ -342,6 +357,10 @@ final class AppCoordinator {
             }
             return true
         case .ended(let point):
+            guard handActionAllowed(.drag(.ended(point))) else {
+                return true
+            }
+
             switch clickDispatcher.dispatchLeftMouseUp(at: point) {
             case .success:
                 appState.lastEventDescription = "Drag ended"
@@ -381,6 +400,10 @@ final class AppCoordinator {
             return true
         }
 
+        guard handActionAllowed(.click(point)) else {
+            return true
+        }
+
         switch clickDispatcher.dispatchLeftClick(at: point) {
         case .success:
             clickCooldownController.registerClick(at: stableObservation.timestamp)
@@ -390,6 +413,18 @@ final class AppCoordinator {
         }
 
         return true
+    }
+
+    private func handActionAllowed(_ action: HandModeAction) -> Bool {
+        switch handActionControlController.evaluate(action) {
+        case .accepted:
+            return true
+        case .blockedFrozen:
+            appState.lastEventDescription = "Hand actions frozen"
+            return false
+        case .freezeChanged, .cancelled:
+            return false
+        }
     }
 
     private func handleHandLandmarkFailure(_ message: String) {
