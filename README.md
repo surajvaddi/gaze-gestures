@@ -216,8 +216,24 @@ Phase 9 validation:
 
 ### Phase 10: Hand Mode Usability
 
-- add drag, scroll, freeze, cancel, calibration, and replay fixtures
-- expand settings only after the basic click path is trustworthy
+- add a typed hand action model covering click, drag, scroll, freeze, and cancel
+- add sustained-pinch drag intent tracking and guarded mouse down, drag, and up dispatch
+- add open-hand scroll intent tracking and guarded scroll dispatch
+- add freeze/cancel action safety controls before OS dispatch
+- add a hand calibration profile for classifier, cursor, drag, and scroll tuning
+- add replay fixtures for deterministic click, drag, and scroll sequences
+- expand Settings with a minimal hand controls surface
+
+Phase 10 validation:
+
+- `swift test` passes with 194 tests
+- `Scripts/build-app.sh` builds and codesigns `dist/GestureGaze.app`
+- sustained pinch starts drag, movement emits drag, and open hand ends drag without also clicking
+- open-hand movement emits scroll deltas through the dispatcher path
+- frozen hand actions block click dispatch while leaving normal click paths unchanged when live
+- calibration profile maps to existing conservative classifier, cursor, drag, and scroll defaults
+- replay fixtures classify into the intended click, drag, and scroll sequences
+- settings presentation covers calibration and hand action safety states
 
 ### Phase 11: Experimental Gaze Mode
 
