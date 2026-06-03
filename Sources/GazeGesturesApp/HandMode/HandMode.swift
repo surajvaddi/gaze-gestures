@@ -23,6 +23,69 @@ struct HandScrollDelta: Equatable {
     }
 }
 
+struct HandScrollConfiguration: Equatable {
+    var minimumMovement: Double
+    var horizontalScale: Double
+    var verticalScale: Double
+
+    static let conservativeDefault = HandScrollConfiguration(
+        minimumMovement: 3,
+        horizontalScale: 0.25,
+        verticalScale: 0.25
+    )
+}
+
+enum HandScrollIntent: Equatable {
+    case none
+    case scrolled(HandScrollDelta)
+}
+
+final class HandScrollIntentDetector {
+    private let configuration: HandScrollConfiguration
+    private var lastPoint: ScreenPoint?
+
+    init(configuration: HandScrollConfiguration = .conservativeDefault) {
+        self.configuration = configuration
+    }
+
+    func process(point: ScreenPoint?) -> HandScrollIntent {
+        guard let point else {
+            reset()
+            return .none
+        }
+
+        guard let lastPoint else {
+            self.lastPoint = point
+            return .none
+        }
+
+        let movement = ScreenPoint(
+            x: point.x - lastPoint.x,
+            y: point.y - lastPoint.y
+        )
+        guard shouldScroll(for: movement) else {
+            return .none
+        }
+
+        self.lastPoint = point
+        return .scrolled(
+            HandScrollDelta(
+                horizontal: movement.x * configuration.horizontalScale,
+                vertical: movement.y * configuration.verticalScale
+            )
+        )
+    }
+
+    func reset() {
+        lastPoint = nil
+    }
+
+    private func shouldScroll(for movement: ScreenPoint) -> Bool {
+        abs(movement.x) >= max(configuration.minimumMovement, 0)
+            || abs(movement.y) >= max(configuration.minimumMovement, 0)
+    }
+}
+
 enum HandModeActionState: Equatable {
     case idle
     case preparing(HandModeAction)

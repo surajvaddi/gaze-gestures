@@ -57,6 +57,93 @@ final class HandModeTests: XCTestCase {
         XCTAssertTrue(HandModeActionState.cancelled.isTerminal)
     }
 
+    func testConservativeHandScrollConfigurationDefaultsAreExplicit() {
+        let configuration = HandScrollConfiguration.conservativeDefault
+
+        XCTAssertEqual(configuration.minimumMovement, 3)
+        XCTAssertEqual(configuration.horizontalScale, 0.25)
+        XCTAssertEqual(configuration.verticalScale, 0.25)
+    }
+
+    func testHandScrollIntentDetectorDoesNotScrollOnFirstPoint() {
+        let detector = HandScrollIntentDetector()
+
+        XCTAssertEqual(
+            detector.process(point: ScreenPoint(x: 10, y: 20)),
+            .none
+        )
+    }
+
+    func testHandScrollIntentDetectorIgnoresMovementInsideDeadZone() {
+        let detector = HandScrollIntentDetector(
+            configuration: HandScrollConfiguration(
+                minimumMovement: 4,
+                horizontalScale: 1,
+                verticalScale: 1
+            )
+        )
+
+        _ = detector.process(point: ScreenPoint(x: 10, y: 20))
+
+        XCTAssertEqual(
+            detector.process(point: ScreenPoint(x: 13, y: 23)),
+            .none
+        )
+    }
+
+    func testHandScrollIntentDetectorScalesMovementIntoDelta() {
+        let detector = HandScrollIntentDetector(
+            configuration: HandScrollConfiguration(
+                minimumMovement: 2,
+                horizontalScale: 0.50,
+                verticalScale: -0.25
+            )
+        )
+
+        _ = detector.process(point: ScreenPoint(x: 10, y: 20))
+
+        XCTAssertEqual(
+            detector.process(point: ScreenPoint(x: 14, y: 12)),
+            .scrolled(HandScrollDelta(horizontal: 2, vertical: 2))
+        )
+    }
+
+    func testHandScrollIntentDetectorResetClearsReferencePoint() {
+        let detector = HandScrollIntentDetector(
+            configuration: HandScrollConfiguration(
+                minimumMovement: 1,
+                horizontalScale: 1,
+                verticalScale: 1
+            )
+        )
+
+        _ = detector.process(point: ScreenPoint(x: 10, y: 20))
+        detector.reset()
+
+        XCTAssertEqual(
+            detector.process(point: ScreenPoint(x: 20, y: 30)),
+            .none
+        )
+    }
+
+    func testHandScrollIntentDetectorMissingPointClearsReferencePoint() {
+        let detector = HandScrollIntentDetector(
+            configuration: HandScrollConfiguration(
+                minimumMovement: 1,
+                horizontalScale: 1,
+                verticalScale: 1
+            )
+        )
+
+        _ = detector.process(point: ScreenPoint(x: 10, y: 20))
+        XCTAssertEqual(detector.process(point: nil), .none)
+
+        XCTAssertEqual(
+            detector.process(point: ScreenPoint(x: 20, y: 30)),
+            .none
+        )
+    }
+
     func testConservativePinchDragConfigurationDefaultsAreExplicit() {
         let configuration = PinchDragConfiguration.conservativeDefault
 
