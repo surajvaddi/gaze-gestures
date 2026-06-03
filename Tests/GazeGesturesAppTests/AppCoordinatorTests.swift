@@ -1119,6 +1119,7 @@ private struct CoordinatorScreenBoundsProvider: ScreenBoundsProviding {
 
 private final class CoordinatorClickDispatcher: ClickDispatching {
     private(set) var leftClickPoints: [ScreenPoint] = []
+    private(set) var dragEvents: [CoordinatorDragEvent] = []
     var result: Result<Void, ClickDispatchError> = .success(())
 
     func dispatchLeftClick(at point: ScreenPoint) -> Result<Void, ClickDispatchError> {
@@ -1129,6 +1130,33 @@ private final class CoordinatorClickDispatcher: ClickDispatching {
         leftClickPoints.append(point)
         return result
     }
+
+    func dispatchLeftMouseDown(at point: ScreenPoint) -> Result<Void, ClickDispatchError> {
+        recordDragEvent(.down(point))
+    }
+
+    func dispatchLeftMouseDrag(to point: ScreenPoint) -> Result<Void, ClickDispatchError> {
+        recordDragEvent(.drag(point))
+    }
+
+    func dispatchLeftMouseUp(at point: ScreenPoint) -> Result<Void, ClickDispatchError> {
+        recordDragEvent(.up(point))
+    }
+
+    private func recordDragEvent(_ event: CoordinatorDragEvent) -> Result<Void, ClickDispatchError> {
+        guard case .success = result else {
+            return result
+        }
+
+        dragEvents.append(event)
+        return result
+    }
+}
+
+private enum CoordinatorDragEvent: Equatable {
+    case down(ScreenPoint)
+    case drag(ScreenPoint)
+    case up(ScreenPoint)
 }
 
 private func pinchCoordinator(

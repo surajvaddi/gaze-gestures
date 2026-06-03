@@ -9,6 +9,12 @@ enum ClickDispatchError: Error, Equatable {
 protocol ClickDispatching {
     @discardableResult
     func dispatchLeftClick(at point: ScreenPoint) -> Result<Void, ClickDispatchError>
+    @discardableResult
+    func dispatchLeftMouseDown(at point: ScreenPoint) -> Result<Void, ClickDispatchError>
+    @discardableResult
+    func dispatchLeftMouseDrag(to point: ScreenPoint) -> Result<Void, ClickDispatchError>
+    @discardableResult
+    func dispatchLeftMouseUp(at point: ScreenPoint) -> Result<Void, ClickDispatchError>
 }
 
 enum SafeClickRejectionReason: Equatable {
@@ -165,26 +171,57 @@ final class CGEventClickDispatcher: ClickDispatching {
             return .failure(.accessibilityNotTrusted)
         }
 
-        let cgPoint = CGPoint(x: point.x, y: point.y)
-
-        guard let mouseDown = CGEvent(
-            mouseEventSource: nil,
-            mouseType: .leftMouseDown,
-            mouseCursorPosition: cgPoint,
-            mouseButton: .left
-        ),
-            let mouseUp = CGEvent(
-                mouseEventSource: nil,
-                mouseType: .leftMouseUp,
-                mouseCursorPosition: cgPoint,
-                mouseButton: .left
-            ) else {
+        guard postMouseEvent(.leftMouseDown, at: point),
+              postMouseEvent(.leftMouseUp, at: point) else {
             return .failure(.eventCreationFailed)
         }
 
-        mouseDown.post(tap: .cghidEventTap)
-        mouseUp.post(tap: .cghidEventTap)
+        return .success(())
+    }
+
+    @discardableResult
+    func dispatchLeftMouseDown(at point: ScreenPoint) -> Result<Void, ClickDispatchError> {
+        dispatchMouseEvent(.leftMouseDown, at: point)
+    }
+
+    @discardableResult
+    func dispatchLeftMouseDrag(to point: ScreenPoint) -> Result<Void, ClickDispatchError> {
+        dispatchMouseEvent(.leftMouseDragged, at: point)
+    }
+
+    @discardableResult
+    func dispatchLeftMouseUp(at point: ScreenPoint) -> Result<Void, ClickDispatchError> {
+        dispatchMouseEvent(.leftMouseUp, at: point)
+    }
+
+    private func dispatchMouseEvent(
+        _ type: CGEventType,
+        at point: ScreenPoint
+    ) -> Result<Void, ClickDispatchError> {
+        guard accessibilityTrusted() else {
+            return .failure(.accessibilityNotTrusted)
+        }
+
+        guard postMouseEvent(type, at: point) else {
+            return .failure(.eventCreationFailed)
+        }
 
         return .success(())
+    }
+
+    private func postMouseEvent(_ type: CGEventType, at point: ScreenPoint) -> Bool {
+        let cgPoint = CGPoint(x: point.x, y: point.y)
+
+        guard let event = CGEvent(
+            mouseEventSource: nil,
+            mouseType: type,
+            mouseCursorPosition: cgPoint,
+            mouseButton: .left
+        ) else {
+            return false
+        }
+
+        event.post(tap: .cghidEventTap)
+        return true
     }
 }

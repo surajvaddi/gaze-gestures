@@ -249,11 +249,40 @@ final class ClickDispatchTests: XCTestCase {
         XCTAssertEqual(dispatcher.leftClickPoints, [])
     }
 
+    func testRecordingClickDispatcherStoresDragEvents() {
+        let dispatcher = RecordingClickDispatcher()
+
+        XCTAssertTrue(dispatcher.dispatchLeftMouseDown(at: ScreenPoint(x: 10, y: 20)).isSuccess)
+        XCTAssertTrue(dispatcher.dispatchLeftMouseDrag(to: ScreenPoint(x: 12, y: 22)).isSuccess)
+        XCTAssertTrue(dispatcher.dispatchLeftMouseUp(at: ScreenPoint(x: 14, y: 24)).isSuccess)
+
+        XCTAssertEqual(
+            dispatcher.dragEvents,
+            [
+                .down(ScreenPoint(x: 10, y: 20)),
+                .drag(ScreenPoint(x: 12, y: 22)),
+                .up(ScreenPoint(x: 14, y: 24))
+            ]
+        )
+    }
+
     func testCGEventClickDispatcherRejectsWhenAccessibilityIsNotTrusted() {
         let dispatcher = CGEventClickDispatcher(accessibilityTrusted: { false })
 
         XCTAssertEqual(
             dispatcher.dispatchLeftClick(at: ScreenPoint(x: 10, y: 20)).failure,
+            .accessibilityNotTrusted
+        )
+        XCTAssertEqual(
+            dispatcher.dispatchLeftMouseDown(at: ScreenPoint(x: 10, y: 20)).failure,
+            .accessibilityNotTrusted
+        )
+        XCTAssertEqual(
+            dispatcher.dispatchLeftMouseDrag(to: ScreenPoint(x: 10, y: 20)).failure,
+            .accessibilityNotTrusted
+        )
+        XCTAssertEqual(
+            dispatcher.dispatchLeftMouseUp(at: ScreenPoint(x: 10, y: 20)).failure,
             .accessibilityNotTrusted
         )
     }
@@ -280,6 +309,7 @@ private extension Result where Success == Void, Failure == ClickDispatchError {
 private final class RecordingClickDispatcher: ClickDispatching {
     private let result: Result<Void, ClickDispatchError>
     private(set) var leftClickPoints: [ScreenPoint] = []
+    private(set) var dragEvents: [RecordedDragEvent] = []
 
     init(result: Result<Void, ClickDispatchError> = .success(())) {
         self.result = result
@@ -293,6 +323,33 @@ private final class RecordingClickDispatcher: ClickDispatching {
         leftClickPoints.append(point)
         return result
     }
+
+    func dispatchLeftMouseDown(at point: ScreenPoint) -> Result<Void, ClickDispatchError> {
+        recordDragEvent(.down(point))
+    }
+
+    func dispatchLeftMouseDrag(to point: ScreenPoint) -> Result<Void, ClickDispatchError> {
+        recordDragEvent(.drag(point))
+    }
+
+    func dispatchLeftMouseUp(at point: ScreenPoint) -> Result<Void, ClickDispatchError> {
+        recordDragEvent(.up(point))
+    }
+
+    private func recordDragEvent(_ event: RecordedDragEvent) -> Result<Void, ClickDispatchError> {
+        guard case .success = result else {
+            return result
+        }
+
+        dragEvents.append(event)
+        return result
+    }
+}
+
+private enum RecordedDragEvent: Equatable {
+    case down(ScreenPoint)
+    case drag(ScreenPoint)
+    case up(ScreenPoint)
 }
 
 private func pinchObservation(
