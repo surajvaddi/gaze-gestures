@@ -11,8 +11,14 @@ struct PermissionActions {
 struct SettingsView: View {
     @ObservedObject var appState: AppState
     let permissionActions: PermissionActions
+    private let handCalibrationProfile = HandCalibrationProfile.conservativeDefault
 
     var body: some View {
+        let handCalibration = AppPresentation.handCalibration(for: handCalibrationProfile)
+        let handSafety = AppPresentation.handActionSafety(
+            isFrozen: appState.lastEventDescription == "Hand actions frozen"
+        )
+
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Gaze Gestures")
@@ -39,6 +45,22 @@ struct SettingsView: View {
                 LabeledContent(
                     "Hand detection",
                     value: AppPresentation.handDetection(for: appState.handDetectionState).label
+                )
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Hand controls")
+                    .font(.headline)
+
+                LabeledContent("Calibration", value: handCalibration.label)
+                LabeledContent("Safety", value: handSafety.label)
+                LabeledContent(
+                    "Drag hold",
+                    value: "\(String(format: "%.2f", handCalibrationProfile.dragHoldDuration))s"
+                )
+                LabeledContent(
+                    "Scroll scale",
+                    value: "\(String(format: "%.2f", handCalibrationProfile.verticalScrollScale))"
                 )
             }
 
@@ -81,7 +103,7 @@ struct SettingsView: View {
             Spacer()
         }
         .padding(24)
-        .frame(minWidth: 560, minHeight: 460)
+        .frame(minWidth: 560, minHeight: 540)
     }
 
     private func permissionRow(

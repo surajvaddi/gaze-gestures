@@ -94,4 +94,24 @@ final class AppPresentationTests: XCTestCase {
         XCTAssertEqual(visible.helpText, "Pinch cursor at x 120, y 251.")
         XCTAssertEqual(visible.tint, .green)
     }
+
+    func testHandCalibrationPresentationSummarizesProfile() {
+        let presentation = AppPresentation.handCalibration(
+            for: .conservativeDefault
+        )
+
+        XCTAssertEqual(presentation.label, "Hand Defaults")
+        XCTAssertEqual(presentation.helpText, "Pinch 0.06, open 0.10, drag hold 0.45s.")
+        XCTAssertEqual(presentation.tint, .blue)
+    }
+
+    func testHandActionSafetyPresentationCoversFrozenAndLiveStates() {
+        let live = AppPresentation.handActionSafety(isFrozen: false)
+        let frozen = AppPresentation.handActionSafety(isFrozen: true)
+
+        XCTAssertEqual(live.label, "Actions Live")
+        XCTAssertEqual(live.tint, .green)
+        XCTAssertEqual(frozen.label, "Actions Frozen")
+        XCTAssertEqual(frozen.tint, .orange)
+    }
 }

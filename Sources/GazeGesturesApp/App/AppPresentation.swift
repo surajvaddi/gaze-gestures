@@ -40,6 +40,18 @@ struct VirtualCursorPresentation: Equatable {
     var tint: PresentationTint
 }
 
+struct HandCalibrationPresentation: Equatable {
+    var label: String
+    var helpText: String
+    var tint: PresentationTint
+}
+
+struct HandActionSafetyPresentation: Equatable {
+    var label: String
+    var helpText: String
+    var tint: PresentationTint
+}
+
 enum AppPresentation {
     static func mode(
         for mode: AppMode,
@@ -205,7 +217,35 @@ enum AppPresentation {
         }
     }
 
+    static func handCalibration(for profile: HandCalibrationProfile) -> HandCalibrationPresentation {
+        HandCalibrationPresentation(
+            label: "Hand Defaults",
+            helpText: "Pinch \(formattedDecimal(profile.pinchingDistanceThreshold)), open \(formattedDecimal(profile.openDistanceThreshold)), drag hold \(formattedDecimal(profile.dragHoldDuration))s.",
+            tint: .blue
+        )
+    }
+
+    static func handActionSafety(isFrozen: Bool) -> HandActionSafetyPresentation {
+        if isFrozen {
+            return HandActionSafetyPresentation(
+                label: "Actions Frozen",
+                helpText: "Recognition can continue, but click, drag, and scroll dispatch are blocked.",
+                tint: .orange
+            )
+        }
+
+        return HandActionSafetyPresentation(
+            label: "Actions Live",
+            helpText: "Click, drag, and scroll dispatch can run when gesture gates accept.",
+            tint: .green
+        )
+    }
+
     private static func formatted(_ value: Double) -> String {
         String(format: "%.0f", value)
+    }
+
+    private static func formattedDecimal(_ value: Double) -> String {
+        String(format: "%.2f", value)
     }
 }
