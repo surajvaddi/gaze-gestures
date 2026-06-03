@@ -653,6 +653,44 @@ final class AppCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.appState.lastEventDescription, "Pinch released")
     }
 
+    func testStableOpenMovementDispatchesScrollDelta() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let handLandmarkDetector = CoordinatorHandLandmarkDetector()
+        let clickDispatcher = CoordinatorClickDispatcher()
+        let coordinator = pinchCoordinator(
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector,
+            handLandmarkDetector: handLandmarkDetector,
+            clickDispatcher: clickDispatcher,
+            handScrollIntentDetector: HandScrollIntentDetector(
+                configuration: HandScrollConfiguration(
+                    minimumMovement: 1,
+                    horizontalScale: 1,
+                    verticalScale: 1
+                )
+            )
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        handPresenceDetector.publishStablePresent()
+        handLandmarkDetector.publish(.open(midpointX: 0.40, midpointY: 0.50, timestamp: 90))
+        handLandmarkDetector.publish(.open(midpointX: 0.40, midpointY: 0.50, timestamp: 90.10))
+        handLandmarkDetector.publish(.open(midpointX: 0.40, midpointY: 0.65, timestamp: 90.20))
+        handLandmarkDetector.publish(.open(midpointX: 0.40, midpointY: 0.65, timestamp: 90.30))
+
+        XCTAssertEqual(
+            clickDispatcher.scrollDeltas,
+            [HandScrollDelta(horizontal: 0, vertical: 6)]
+        )
+        XCTAssertEqual(clickDispatcher.leftClickPoints, [])
+        XCTAssertEqual(coordinator.appState.lastEventDescription, "Scrolled")
+    }
+
     func testClickCooldownBlocksDuplicatePinchReleaseDispatch() {
         let hotkeyManager = CoordinatorHotkeyManager()
         let cameraSessionManager = CoordinatorCameraSessionManager()
@@ -1251,7 +1289,8 @@ private func pinchCoordinator(
     handLandmarkDetector: CoordinatorHandLandmarkDetector,
     clickDispatcher: ClickDispatching = CoordinatorClickDispatcher(),
     clickCooldownController: ClickCooldownController = ClickCooldownController(),
-    pinchDragIntentTracker: PinchDragIntentTracker = PinchDragIntentTracker()
+    pinchDragIntentTracker: PinchDragIntentTracker = PinchDragIntentTracker(),
+    handScrollIntentDetector: HandScrollIntentDetector = HandScrollIntentDetector()
 ) -> AppCoordinator {
     AppCoordinator(
         permissionProvider: CoordinatorPermissionProvider(
@@ -1293,6 +1332,7 @@ private func pinchCoordinator(
         ),
         clickCooldownController: clickCooldownController,
         pinchDragIntentTracker: pinchDragIntentTracker,
+        handScrollIntentDetector: handScrollIntentDetector,
         clickDispatcher: clickDispatcher,
         screenBoundsProvider: CoordinatorScreenBoundsProvider()
     )
@@ -1336,13 +1376,21 @@ private extension HandLandmarkObservation {
     }
 
     static func open(timestamp: TimeInterval) -> HandLandmarkObservation {
+        open(midpointX: 0.375, midpointY: 0.50, timestamp: timestamp)
+    }
+
+    static func open(
+        midpointX: Double,
+        midpointY: Double,
+        timestamp: TimeInterval
+    ) -> HandLandmarkObservation {
         HandLandmarkObservation(
             thumbTip: HandLandmarkPoint(
-                location: NormalizedPoint(x: 0.30, y: 0.50),
+                location: NormalizedPoint(x: midpointX - 0.075, y: midpointY),
                 confidence: 0.90
             ),
             indexTip: HandLandmarkPoint(
-                location: NormalizedPoint(x: 0.45, y: 0.50),
+                location: NormalizedPoint(x: midpointX + 0.075, y: midpointY),
                 confidence: 0.92
             ),
             timestamp: timestamp

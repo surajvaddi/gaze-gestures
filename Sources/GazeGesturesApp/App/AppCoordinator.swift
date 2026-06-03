@@ -15,11 +15,13 @@ final class AppCoordinator {
     private let pinchCooldownController: PinchCooldownController
     private let pinchStabilityController: PinchStabilityController
     private let pinchCursorMapper: PinchCursorMapper
+    private let handScrollPointMapper: PinchCursorMapper
     private let pinchCursorSmoother: PinchCursorSmoother
     private let safeClickGate: SafeClickGate
     private let clickCooldownController: ClickCooldownController
     private let pinchClickIntentTracker: PinchClickIntentTracker
     private let pinchDragIntentTracker: PinchDragIntentTracker
+    private let handScrollIntentDetector: HandScrollIntentDetector
     private let clickDispatcher: ClickDispatching
     private let screenBoundsProvider: ScreenBoundsProviding
     private let modeController: ModeController
@@ -40,11 +42,20 @@ final class AppCoordinator {
         pinchCooldownController: PinchCooldownController = PinchCooldownController(),
         pinchStabilityController: PinchStabilityController = PinchStabilityController(),
         pinchCursorMapper: PinchCursorMapper = PinchCursorMapper(),
+        handScrollPointMapper: PinchCursorMapper = PinchCursorMapper(
+            configuration: PinchCursorMappingConfiguration(
+                minimumConfidence: 0.65,
+                mirrorsHorizontally: false,
+                invertsVertically: false,
+                requiredState: .open
+            )
+        ),
         pinchCursorSmoother: PinchCursorSmoother = PinchCursorSmoother(),
         safeClickGate: SafeClickGate = SafeClickGate(),
         clickCooldownController: ClickCooldownController = ClickCooldownController(),
         pinchClickIntentTracker: PinchClickIntentTracker = PinchClickIntentTracker(),
         pinchDragIntentTracker: PinchDragIntentTracker = PinchDragIntentTracker(),
+        handScrollIntentDetector: HandScrollIntentDetector = HandScrollIntentDetector(),
         clickDispatcher: ClickDispatching = CGEventClickDispatcher(),
         screenBoundsProvider: ScreenBoundsProviding = AppKitScreenBoundsProvider()
     ) {
@@ -61,11 +72,13 @@ final class AppCoordinator {
         self.pinchCooldownController = pinchCooldownController
         self.pinchStabilityController = pinchStabilityController
         self.pinchCursorMapper = pinchCursorMapper
+        self.handScrollPointMapper = handScrollPointMapper
         self.pinchCursorSmoother = pinchCursorSmoother
         self.safeClickGate = safeClickGate
         self.clickCooldownController = clickCooldownController
         self.pinchClickIntentTracker = pinchClickIntentTracker
         self.pinchDragIntentTracker = pinchDragIntentTracker
+        self.handScrollIntentDetector = handScrollIntentDetector
         self.clickDispatcher = clickDispatcher
         self.screenBoundsProvider = screenBoundsProvider
         self.modeController = ModeController(
@@ -273,14 +286,38 @@ final class AppCoordinator {
             let handledDragOutcome = handlePinchDragIntent(dragIntent)
             let handledClickOutcome = handledDragOutcome
                 || handlePinchClickIntent(clickIntent, for: stableObservation)
+            let handledScrollOutcome = handledClickOutcome
+                ? false
+                : handleHandScrollObservation(stableObservation)
             pinchCooldownController.registerRelease(at: stableObservation.timestamp)
             pinchObservationBuffer.reset()
             hidePinchCursor()
-            if !handledClickOutcome {
+            if !handledClickOutcome && !handledScrollOutcome {
                 appState.lastEventDescription = "Pinch released"
             }
         case .unknown:
             break
+        }
+    }
+
+    private func handleHandScrollObservation(_ stableObservation: PinchObservation) -> Bool {
+        guard let bounds = screenBoundsProvider.currentScreenBounds(),
+              let scrollPoint = handScrollPointMapper.map(stableObservation, in: bounds) else {
+            _ = handScrollIntentDetector.process(point: nil)
+            return false
+        }
+
+        switch handScrollIntentDetector.process(point: scrollPoint) {
+        case .none:
+            return false
+        case .scrolled(let delta):
+            switch clickDispatcher.dispatchScroll(delta) {
+            case .success:
+                appState.lastEventDescription = "Scrolled"
+            case .failure:
+                appState.lastEventDescription = "Scroll failed"
+            }
+            return true
         }
     }
 
@@ -420,6 +457,7 @@ final class AppCoordinator {
         clickCooldownController.reset()
         pinchClickIntentTracker.reset()
         pinchDragIntentTracker.reset()
+        handScrollIntentDetector.reset()
         pinchCursorSmoother.reset()
         appState.virtualCursorState = .hidden
     }
