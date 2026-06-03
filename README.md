@@ -204,6 +204,16 @@ Phase 8 validation:
 - enable only pinch-release left click
 - require confidence, correct mode, stable cursor, and inactive cooldown
 
+Phase 9 validation:
+
+- `swift test` passes with 159 tests
+- left click dispatch is isolated behind `ClickDispatching`
+- `CGEventClickDispatcher` refuses dispatch when Accessibility is not trusted
+- pinch-to-open release is the only click intent path
+- safe click gating requires hand gesture mode, release intent, visible cursor, confidence, and inactive cooldown
+- duplicate click dispatch is blocked by post-click cooldown
+- click dispatch failures and cooldown blocks surface status messages
+
 ### Phase 10: Hand Mode Usability
 
 - add drag, scroll, freeze, cancel, calibration, and replay fixtures
