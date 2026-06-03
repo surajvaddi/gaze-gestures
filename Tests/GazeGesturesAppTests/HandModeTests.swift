@@ -56,4 +56,158 @@ final class HandModeTests: XCTestCase {
         )
         XCTAssertTrue(HandModeActionState.cancelled.isTerminal)
     }
+
+    func testConservativePinchDragConfigurationDefaultsAreExplicit() {
+        let configuration = PinchDragConfiguration.conservativeDefault
+
+        XCTAssertEqual(configuration.holdDuration, 0.45)
+        XCTAssertEqual(configuration.minimumMovement, 2)
+    }
+
+    func testPinchDragIntentTrackerDoesNotStartBeforeHoldDuration() {
+        let tracker = PinchDragIntentTracker(
+            configuration: PinchDragConfiguration(holdDuration: 0.50, minimumMovement: 1)
+        )
+
+        XCTAssertEqual(
+            tracker.process(
+                observation: pinchObservation(state: .pinching, timestamp: 10),
+                cursorPoint: ScreenPoint(x: 10, y: 20)
+            ),
+            .none
+        )
+        XCTAssertEqual(
+            tracker.process(
+                observation: pinchObservation(state: .pinching, timestamp: 10.49),
+                cursorPoint: ScreenPoint(x: 11, y: 20)
+            ),
+            .none
+        )
+    }
+
+    func testPinchDragIntentTrackerStartsAfterHoldDuration() {
+        let tracker = PinchDragIntentTracker(
+            configuration: PinchDragConfiguration(holdDuration: 0.50, minimumMovement: 1)
+        )
+
+        _ = tracker.process(
+            observation: pinchObservation(state: .pinching, timestamp: 10),
+            cursorPoint: ScreenPoint(x: 10, y: 20)
+        )
+
+        XCTAssertEqual(
+            tracker.process(
+                observation: pinchObservation(state: .pinching, timestamp: 10.50),
+                cursorPoint: ScreenPoint(x: 12, y: 20)
+            ),
+            .started(ScreenPoint(x: 12, y: 20))
+        )
+    }
+
+    func testPinchDragIntentTrackerMovesOnlyAfterMinimumMovement() {
+        let tracker = PinchDragIntentTracker(
+            configuration: PinchDragConfiguration(holdDuration: 0, minimumMovement: 3)
+        )
+
+        _ = tracker.process(
+            observation: pinchObservation(state: .pinching, timestamp: 10),
+            cursorPoint: ScreenPoint(x: 10, y: 20)
+        )
+        _ = tracker.process(
+            observation: pinchObservation(state: .pinching, timestamp: 10.10),
+            cursorPoint: ScreenPoint(x: 10, y: 20)
+        )
+
+        XCTAssertEqual(
+            tracker.process(
+                observation: pinchObservation(state: .pinching, timestamp: 10.20),
+                cursorPoint: ScreenPoint(x: 12, y: 20)
+            ),
+            .none
+        )
+        XCTAssertEqual(
+            tracker.process(
+                observation: pinchObservation(state: .pinching, timestamp: 10.30),
+                cursorPoint: ScreenPoint(x: 13, y: 20)
+            ),
+            .moved(ScreenPoint(x: 13, y: 20))
+        )
+    }
+
+    func testPinchDragIntentTrackerEndsOnOpenAfterDragStarted() {
+        let tracker = PinchDragIntentTracker(
+            configuration: PinchDragConfiguration(holdDuration: 0, minimumMovement: 1)
+        )
+
+        _ = tracker.process(
+            observation: pinchObservation(state: .pinching, timestamp: 10),
+            cursorPoint: ScreenPoint(x: 10, y: 20)
+        )
+        _ = tracker.process(
+            observation: pinchObservation(state: .pinching, timestamp: 10.10),
+            cursorPoint: ScreenPoint(x: 12, y: 20)
+        )
+
+        XCTAssertEqual(
+            tracker.process(
+                observation: pinchObservation(state: .open, timestamp: 10.20),
+                cursorPoint: nil
+            ),
+            .ended(ScreenPoint(x: 12, y: 20))
+        )
+    }
+
+    func testPinchDragIntentTrackerOpenBeforeDragDoesNotEmitEnd() {
+        let tracker = PinchDragIntentTracker(
+            configuration: PinchDragConfiguration(holdDuration: 1, minimumMovement: 1)
+        )
+
+        _ = tracker.process(
+            observation: pinchObservation(state: .pinching, timestamp: 10),
+            cursorPoint: ScreenPoint(x: 10, y: 20)
+        )
+
+        XCTAssertEqual(
+            tracker.process(
+                observation: pinchObservation(state: .open, timestamp: 10.20),
+                cursorPoint: nil
+            ),
+            .none
+        )
+    }
+
+    func testPinchDragIntentTrackerCancelsOnUnknownOrMissingPoint() {
+        let tracker = PinchDragIntentTracker()
+
+        XCTAssertEqual(
+            tracker.process(
+                observation: pinchObservation(state: .pinching, timestamp: 10),
+                cursorPoint: nil
+            ),
+            .cancelled
+        )
+        XCTAssertEqual(
+            tracker.process(
+                observation: pinchObservation(state: .unknown, timestamp: 11),
+                cursorPoint: nil
+            ),
+            .cancelled
+        )
+    }
+}
+
+private func pinchObservation(
+    state: PinchState,
+    timestamp: TimeInterval,
+    confidence: Double = 0.90
+) -> PinchObservation {
+    PinchObservation(
+        state: state,
+        thumbTip: nil,
+        indexTip: nil,
+        midpoint: NormalizedPoint(x: 0.40, y: 0.50),
+        normalizedDistance: nil,
+        confidence: confidence,
+        timestamp: timestamp
+    )
 }
