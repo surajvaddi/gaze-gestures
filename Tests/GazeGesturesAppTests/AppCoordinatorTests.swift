@@ -715,6 +715,81 @@ final class AppCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.appState.lastEventDescription, "Pinch click failed")
     }
 
+    func testSustainedPinchStartsAndEndsDragWithoutClick() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let handLandmarkDetector = CoordinatorHandLandmarkDetector()
+        let clickDispatcher = CoordinatorClickDispatcher()
+        let coordinator = pinchCoordinator(
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector,
+            handLandmarkDetector: handLandmarkDetector,
+            clickDispatcher: clickDispatcher,
+            pinchDragIntentTracker: PinchDragIntentTracker(
+                configuration: PinchDragConfiguration(holdDuration: 0.10, minimumMovement: 1)
+            )
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        handPresenceDetector.publishStablePresent()
+        handLandmarkDetector.publish(.pinching(timestamp: 70))
+        handLandmarkDetector.publish(.pinching(timestamp: 70.10))
+        handLandmarkDetector.publish(.pinching(timestamp: 70.20))
+        handLandmarkDetector.publish(.open(timestamp: 70.30))
+        handLandmarkDetector.publish(.open(timestamp: 70.40))
+
+        XCTAssertEqual(
+            clickDispatcher.dragEvents,
+            [
+                .down(ScreenPoint(x: 42, y: 20)),
+                .up(ScreenPoint(x: 42, y: 20))
+            ]
+        )
+        XCTAssertEqual(clickDispatcher.leftClickPoints, [])
+        XCTAssertEqual(coordinator.appState.virtualCursorState, .hidden)
+        XCTAssertEqual(coordinator.appState.lastEventDescription, "Drag ended")
+    }
+
+    func testSustainedPinchDispatchesDragAfterMovementThreshold() {
+        let hotkeyManager = CoordinatorHotkeyManager()
+        let cameraSessionManager = CoordinatorCameraSessionManager()
+        let handPresenceDetector = CoordinatorHandPresenceDetector()
+        let handLandmarkDetector = CoordinatorHandLandmarkDetector()
+        let clickDispatcher = CoordinatorClickDispatcher()
+        let coordinator = pinchCoordinator(
+            hotkeyManager: hotkeyManager,
+            cameraSessionManager: cameraSessionManager,
+            handPresenceDetector: handPresenceDetector,
+            handLandmarkDetector: handLandmarkDetector,
+            clickDispatcher: clickDispatcher,
+            pinchDragIntentTracker: PinchDragIntentTracker(
+                configuration: PinchDragConfiguration(holdDuration: 0.10, minimumMovement: 2)
+            )
+        )
+
+        coordinator.start()
+        hotkeyManager.fire(.activateGestureMode)
+        cameraSessionManager.publish(.running)
+        handPresenceDetector.publishStablePresent()
+        handLandmarkDetector.publish(.pinching(midpointX: 0.42, timestamp: 80))
+        handLandmarkDetector.publish(.pinching(midpointX: 0.42, timestamp: 80.10))
+        handLandmarkDetector.publish(.pinching(midpointX: 0.44, timestamp: 80.20))
+        handLandmarkDetector.publish(.pinching(midpointX: 0.50, timestamp: 80.30))
+
+        XCTAssertEqual(
+            clickDispatcher.dragEvents,
+            [
+                .down(ScreenPoint(x: 44, y: 20)),
+                .drag(ScreenPoint(x: 50, y: 20))
+            ]
+        )
+        XCTAssertEqual(coordinator.appState.lastEventDescription, "Dragging")
+    }
+
     func testRejectedTemporalPinchWindowDoesNotUpdateVirtualCursor() {
         let hotkeyManager = CoordinatorHotkeyManager()
         let cameraSessionManager = CoordinatorCameraSessionManager()
@@ -1165,7 +1240,8 @@ private func pinchCoordinator(
     handPresenceDetector: CoordinatorHandPresenceDetector,
     handLandmarkDetector: CoordinatorHandLandmarkDetector,
     clickDispatcher: ClickDispatching = CoordinatorClickDispatcher(),
-    clickCooldownController: ClickCooldownController = ClickCooldownController()
+    clickCooldownController: ClickCooldownController = ClickCooldownController(),
+    pinchDragIntentTracker: PinchDragIntentTracker = PinchDragIntentTracker()
 ) -> AppCoordinator {
     AppCoordinator(
         permissionProvider: CoordinatorPermissionProvider(
@@ -1206,6 +1282,7 @@ private func pinchCoordinator(
             configuration: PinchCursorSmoothingConfiguration(interpolationFactor: 1)
         ),
         clickCooldownController: clickCooldownController,
+        pinchDragIntentTracker: pinchDragIntentTracker,
         clickDispatcher: clickDispatcher,
         screenBoundsProvider: CoordinatorScreenBoundsProvider()
     )
@@ -1231,13 +1308,17 @@ private extension HandPresenceObservation {
 
 private extension HandLandmarkObservation {
     static func pinching(timestamp: TimeInterval) -> HandLandmarkObservation {
+        pinching(midpointX: 0.42, timestamp: timestamp)
+    }
+
+    static func pinching(midpointX: Double, timestamp: TimeInterval) -> HandLandmarkObservation {
         HandLandmarkObservation(
             thumbTip: HandLandmarkPoint(
-                location: NormalizedPoint(x: 0.40, y: 0.50),
+                location: NormalizedPoint(x: midpointX - 0.02, y: 0.50),
                 confidence: 0.90
             ),
             indexTip: HandLandmarkPoint(
-                location: NormalizedPoint(x: 0.44, y: 0.50),
+                location: NormalizedPoint(x: midpointX + 0.02, y: 0.50),
                 confidence: 0.92
             ),
             timestamp: timestamp

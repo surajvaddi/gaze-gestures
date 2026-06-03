@@ -19,6 +19,7 @@ final class AppCoordinator {
     private let safeClickGate: SafeClickGate
     private let clickCooldownController: ClickCooldownController
     private let pinchClickIntentTracker: PinchClickIntentTracker
+    private let pinchDragIntentTracker: PinchDragIntentTracker
     private let clickDispatcher: ClickDispatching
     private let screenBoundsProvider: ScreenBoundsProviding
     private let modeController: ModeController
@@ -43,6 +44,7 @@ final class AppCoordinator {
         safeClickGate: SafeClickGate = SafeClickGate(),
         clickCooldownController: ClickCooldownController = ClickCooldownController(),
         pinchClickIntentTracker: PinchClickIntentTracker = PinchClickIntentTracker(),
+        pinchDragIntentTracker: PinchDragIntentTracker = PinchDragIntentTracker(),
         clickDispatcher: ClickDispatching = CGEventClickDispatcher(),
         screenBoundsProvider: ScreenBoundsProviding = AppKitScreenBoundsProvider()
     ) {
@@ -63,6 +65,7 @@ final class AppCoordinator {
         self.safeClickGate = safeClickGate
         self.clickCooldownController = clickCooldownController
         self.pinchClickIntentTracker = pinchClickIntentTracker
+        self.pinchDragIntentTracker = pinchDragIntentTracker
         self.clickDispatcher = clickDispatcher
         self.screenBoundsProvider = screenBoundsProvider
         self.modeController = ModeController(
@@ -252,12 +255,24 @@ final class AppCoordinator {
                 return
             }
 
-            appState.virtualCursorState = .visible(
-                pinchCursorSmoother.smooth(mappedPoint)
+            let smoothedPoint = pinchCursorSmoother.smooth(mappedPoint)
+            appState.virtualCursorState = .visible(smoothedPoint)
+
+            let dragIntent = pinchDragIntentTracker.process(
+                observation: stableObservation,
+                cursorPoint: smoothedPoint
             )
-            appState.lastEventDescription = "Pinch cursor active"
+            if !handlePinchDragIntent(dragIntent) {
+                appState.lastEventDescription = "Pinch cursor active"
+            }
         case .open:
-            let handledClickOutcome = handlePinchClickIntent(clickIntent, for: stableObservation)
+            let dragIntent = pinchDragIntentTracker.process(
+                observation: stableObservation,
+                cursorPoint: nil
+            )
+            let handledDragOutcome = handlePinchDragIntent(dragIntent)
+            let handledClickOutcome = handledDragOutcome
+                || handlePinchClickIntent(clickIntent, for: stableObservation)
             pinchCooldownController.registerRelease(at: stableObservation.timestamp)
             pinchObservationBuffer.reset()
             hidePinchCursor()
@@ -266,6 +281,40 @@ final class AppCoordinator {
             }
         case .unknown:
             break
+        }
+    }
+
+    private func handlePinchDragIntent(_ intent: PinchDragIntent) -> Bool {
+        switch intent {
+        case .none:
+            return false
+        case .started(let point):
+            switch clickDispatcher.dispatchLeftMouseDown(at: point) {
+            case .success:
+                appState.lastEventDescription = "Drag started"
+            case .failure:
+                appState.lastEventDescription = "Drag failed"
+            }
+            return true
+        case .moved(let point):
+            switch clickDispatcher.dispatchLeftMouseDrag(to: point) {
+            case .success:
+                appState.lastEventDescription = "Dragging"
+            case .failure:
+                appState.lastEventDescription = "Drag failed"
+            }
+            return true
+        case .ended(let point):
+            switch clickDispatcher.dispatchLeftMouseUp(at: point) {
+            case .success:
+                appState.lastEventDescription = "Drag ended"
+            case .failure:
+                appState.lastEventDescription = "Drag failed"
+            }
+            return true
+        case .cancelled:
+            appState.lastEventDescription = "Drag cancelled"
+            return true
         }
     }
 
@@ -370,6 +419,7 @@ final class AppCoordinator {
         pinchCooldownController.reset()
         clickCooldownController.reset()
         pinchClickIntentTracker.reset()
+        pinchDragIntentTracker.reset()
         pinchCursorSmoother.reset()
         appState.virtualCursorState = .hidden
     }
